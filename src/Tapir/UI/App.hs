@@ -37,9 +37,16 @@ import Control.Exception (SomeException, try)
 import Control.Monad (void, when, unless)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
+import Data.Aeson (Value(..), decode)
+import qualified Data.Aeson.Key as K
+import qualified Data.Aeson.KeyMap as KM
 import Data.Time (getCurrentTime, UTCTime)
 import Data.UUID.V4 (nextRandom)
 import qualified Data.UUID as UUID
+import qualified Data.ByteString.Lazy as BL
+import Data.Maybe (mapMaybe)
+import Data.Foldable (toList)
 import Database.SQLite.Simple (Connection)
 import Graphics.Vty (defaultConfig)
 import Graphics.Vty.CrossPlatform (mkVty)
@@ -48,9 +55,10 @@ import Lens.Micro.Mtl ((.=), (%=), use)
 
 import Tapir.Types
 import Tapir.Config.Types (AppConfig(..))
+import Tapir.Config.Loader (getSystemPrompt, loadLanguageModule)
 import Tapir.Client.LLM
 import Tapir.Client.Anki (mkAnkiClient, checkConnection, addNote, AnkiNote(..), defaultNoteOptions)
-import Tapir.Db.Repository (createSession, saveMessage, saveCard, getRecentSessions, getSessionMessages, updateSessionTimestamp, markCardPushed)
+import Tapir.Db.Repository (createSession, saveMessage, saveCard, getRecentSessions, getSessionMessages, updateSessionTimestamp, markCardPushed, deleteSession)
 import Tapir.UI.Types
 import Tapir.UI.Attrs (tapirAttrMap, attrBorder)
 import Tapir.UI.Chat (renderChat)
@@ -318,11 +326,13 @@ handleMainEvent ev = case ev of
   EvKey (KFun 1) [] -> asModal .= HelpModal
   EvKey (KChar '?') [] -> do
     st <- get
-    when (_asFocus st == FocusHistory) $
-      asModal .= HelpModal
+    if _asFocus st == FocusHistory
+      then asModal .= HelpModal
+      else zoom asInputEditor $ handleEditorEvent (VtyEvent ev)
 
   -- Settings (Ctrl+, or F2)
   EvKey (KChar ',') [MCtrl] -> asModal .= SettingsModal
+  EvKey (KChar ',') [MCtrl, MMeta] -> asModal .= SettingsModal  -- Some terminals add Meta
   EvKey (KFun 2) []         -> asModal .= SettingsModal
 
   -- Mode switching
@@ -466,9 +476,30 @@ handleModalEvent ev = do
 
     SettingsModal -> case ev of
       EvKey KEsc []        -> asModal .= NoModal
-      EvKey (KChar 's') [] -> asModal .= NoModal  -- TODO: Save
+      EvKey (KChar 's') [] -> do
+        -- Save settings (currently just updates language module in state)
+        appState <- get
+        let langMod = _asLangModule appState
+        -- Reload language module with new level
+        liftIO $ do
+          result <- loadLanguageModule (languageId (languageInfo langMod))
+          case result of
+            Right newLangMod -> writeBChan (_asEventChannel appState) (EvLanguageReloaded newLangMod)
+            Left _ -> pure ()
+        asModal .= NoModal
       EvKey (KChar 'r') [] -> asModal .= NoModal  -- TODO: Reload
-      EvKey (KChar 'e') [] -> asModal .= NoModal  -- TODO: Edit prompts
+      EvKey (KChar 'e') [] -> do
+        -- Edit prompts - show system prompt for current mode
+        settingsState <- get
+        let langMod = _asLangModule settingsState
+            mode = _asCurrentMode settingsState
+        case getSystemPrompt langMod mode of
+          Just prompt -> asModal .= PromptPreviewModal prompt
+          Nothing -> pure ()  -- No system prompt defined
+      -- Allow cycling through learner levels with +/- keys
+      EvKey (KChar '+') [] -> cycleLearnerLevel 1
+      EvKey (KChar '-') [] -> cycleLearnerLevel (-1)
+      EvKey (KChar '=') [] -> cycleLearnerLevel 1  -- Same as + (shift+key)
       _                    -> pure ()
 
     CardPreviewModal card -> case ev of
@@ -545,13 +576,74 @@ handleModalEvent ev = do
           asCurrentMode .= summaryMode selectedSummary
           asMessages .= []  -- Will be populated by EvMessagesLoaded
           asModal .= NoModal
+      EvKey (KChar 'd') [] -> do
+        -- Delete selected session
+        when (idx >= 0 && idx < length sums) $ do
+          let selectedSummary = sums !! idx
+              sid = summaryId selectedSummary
+              conn = _asDbConnection st
+              appStateChan = _asEventChannel st
+          -- Delete session asynchronously
+          liftIO $ void $ forkIO $ do
+            _ <- deleteSession conn sid
+            -- Reload sessions list
+            result <- getRecentSessions conn 50
+            case result of
+              Right sessionsWithCount ->
+                writeBChan appStateChan (EvSessionsLoaded (map sessionToSummary sessionsWithCount))
+              Left _ ->
+                writeBChan appStateChan (EvSessionsLoaded [])
+          asModal .= NoModal
+      EvKey (KChar 'n') [] -> do
+        -- Create new session and close modal
+        newState <- get
+        let langMod = _asLangModule newState
+            conn = _asDbConnection newState
+        newSid <- liftIO $ UUID.toText <$> nextRandom
+        now <- liftIO getCurrentTime
+        let newSession = Session
+              { sessionId          = newSid
+              , sessionLanguageId  = languageId (languageInfo langMod)
+              , sessionMode        = _asCurrentMode newState
+              , sessionLearnerLevel = learnerLevel langMod
+              , sessionCreatedAt   = now
+              , sessionUpdatedAt   = now
+              , sessionTitle       = Nothing
+              , sessionActive      = True
+              }
+
+        -- Persist new session to database
+        liftIO $ void $ createSession conn newSession
+
+        asSession .= newSession
+        asMessages .= []
+        asInputEditor .= mkInputEditor
+        asModal .= NoModal
       _                    -> pure ()
 
     ErrorModal _ -> case ev of
       EvKey _ _ -> asModal .= NoModal
       _         -> pure ()
 
+    PromptPreviewModal _ -> case ev of
+      EvKey _ _ -> asModal .= NoModal
+      _         -> pure ()
+
     NoModal -> pure ()
+
+-- | Cycle through learner levels
+cycleLearnerLevel :: Int -> EventM Name AppState ()
+cycleLearnerLevel delta = do
+  st <- get
+  let langMod = _asLangModule st
+      levels = [A1, A2, B1, B2, C1, C2]
+      currentLevel = learnerLevel langMod
+      currentIdx = case currentLevel of
+        A1 -> 0; A2 -> 1; B1 -> 2; B2 -> 3; C1 -> 4; C2 -> 5
+      newIdx = (currentIdx + delta) `mod` length levels
+      newLevel = levels !! newIdx
+      newLangMod = langMod { learnerLevel = newLevel }
+  asLangModule .= newLangMod
 
 -- | Cycle through modes
 cycleMode :: Int -> EventM Name AppState ()
@@ -584,12 +676,16 @@ sendLLMRequest
   -> LanguageModule
   -> Message
   -> IO ()
-sendLLMRequest st chan client _langMod userMsg = do
-  let messages = _asMessages st ++ [userMsg]
+sendLLMRequest st chan client langMod userMsg = do
+  let mode = messageMode userMsg
+      messages = _asMessages st ++ [userMsg]
 
   -- Build chat request
-  -- Convert our messages to LLM ChatMessages
-  let chatMsgs = map toClientMessage messages
+  -- Convert our messages to LLM ChatMessages, with system prompt first
+  let systemPromptMsgs = case getSystemPrompt langMod mode of
+        Just prompt -> [ChatMessage "system" prompt]
+        Nothing    -> []
+      chatMsgs = systemPromptMsgs ++ map toClientMessage messages
       req = defaultChatRequest (providerDefaultModel (_asConfig st)) chatMsgs
 
   -- Stream callback
@@ -629,13 +725,54 @@ sessionToSummary (sess, count) = SessionSummary
 
 -- | Extract a flashcard from an LLM response
 -- Looks for common patterns:
--- 1. Labeled format: "Front: ...\nBack: ..."
--- 2. Simple format: first line = front, rest = back
+-- 1. JSON format: {"front": "...", "back": "...", "tags": [...]}
+-- 2. Labeled format: "Front: ...\nBack: ..."
+-- 3. Simple format: first line = front, rest = back
 extractCardFromResponse :: T.Text -> T.Text -> Maybe Int -> T.Text -> UTCTime -> Maybe AnkiCard
 extractCardFromResponse langId sessionId' sourceMsgId response now =
   -- Try parsing patterns in order of preference
-  tryLabeledFormat `orElse` trySimpleFormat
+  tryJsonFormat `orElse` tryLabeledFormat `orElse` trySimpleFormat
   where
+    -- Try to parse JSON format
+    tryJsonFormat :: Maybe AnkiCard
+    tryJsonFormat = do
+      -- Clean the response: remove markdown code fences if present
+      let cleanResponse = stripMarkdownFences response
+      -- Try to decode as JSON
+      case decode (BL.fromStrict $ TE.encodeUtf8 cleanResponse) of
+        Just (Object obj) -> do
+          frontVal <- KM.lookup (K.fromString "front") obj
+          backVal <- KM.lookup (K.fromString "back") obj
+          front <- case frontVal of
+            String t -> Just t
+            _ -> Nothing
+          back <- case backVal of
+            String t -> Just t
+            _ -> Nothing
+          -- Extract tags if present, otherwise default to language
+          tags <- case KM.lookup (K.fromString "tags") obj of
+            Just (Array arr) ->
+              Just $ mapMaybe (\v -> case v of
+                String t -> Just t
+                _ -> Nothing) (toList arr)
+            _ -> Just [langId]
+          pure $ mkCard front back tags
+        _ -> Nothing
+
+    -- Strip markdown code fences (```json ... ``` or ``` ... ```)
+    stripMarkdownFences :: T.Text -> T.Text
+    stripMarkdownFences text =
+      let lines' = T.lines text
+          firstNonBlank = dropWhile (T.null . T.strip) lines'
+      in case firstNonBlank of
+        (l:rest)
+          | "```" `T.isPrefixOf` l ->
+              -- Find closing fence
+              case break ("```" `T.isPrefixOf`) rest of
+                (content, _closing:_) -> T.unlines content
+                (content, []) -> T.unlines content
+        _ -> text
+
     -- Try "Front: ...\nBack: ..." format (case-insensitive)
     tryLabeledFormat :: Maybe AnkiCard
     tryLabeledFormat =
@@ -655,7 +792,7 @@ extractCardFromResponse langId sessionId' sourceMsgId response now =
                backText = T.strip $ T.drop 5 afterBack  -- Drop "Back:" or "back:"
            in if T.null frontText || T.null backText
               then Nothing
-              else Just $ mkCard frontText backText
+              else Just $ mkCard frontText backText [langId]
          else Nothing
 
     -- Simple format: first non-empty line = front, rest = back
@@ -664,17 +801,17 @@ extractCardFromResponse langId sessionId' sourceMsgId response now =
       let nonEmptyLines = filter (not . T.null . T.strip) (T.lines response)
       in case nonEmptyLines of
         (front:rest) | not (null rest) ->
-          Just $ mkCard (T.strip front) (T.strip $ T.intercalate "\n" rest)
+          Just $ mkCard (T.strip front) (T.strip $ T.intercalate "\n" rest) [langId]
         _ -> Nothing
 
-    mkCard :: T.Text -> T.Text -> AnkiCard
-    mkCard front back = AnkiCard
+    mkCard :: T.Text -> T.Text -> [T.Text] -> AnkiCard
+    mkCard front back tags = AnkiCard
       { cardId          = Nothing
       , cardSessionId   = sessionId'
       , cardLanguageId  = langId
       , cardFront       = front
       , cardBack        = back
-      , cardTags        = [langId]  -- Default tag is the language
+      , cardTags        = tags
       , cardDeck        = langId <> "::TAPIR"  -- Default deck
       , cardSourceMsgId = sourceMsgId
       , cardAnkiNoteId  = Nothing

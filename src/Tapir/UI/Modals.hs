@@ -21,6 +21,7 @@ module Tapir.UI.Modals
   , renderSessionsModal
   , renderConfirmQuitModal
   , renderErrorModal
+  , renderPromptPreviewModal
   ) where
 
 import Brick
@@ -46,6 +47,7 @@ renderModal st = case _asModal st of
   NoModal              -> emptyWidget
   HelpModal            -> renderHelpModal
   SettingsModal        -> renderSettingsModal st
+  PromptPreviewModal prompt -> renderPromptPreviewModal prompt
   CardPreviewModal card -> renderCardPreviewModal card
   SessionsModal sums idx -> renderSessionsModal sums idx
   ConfirmQuitModal     -> renderConfirmQuitModal
@@ -119,7 +121,12 @@ renderSettingsModal st =
        [ withAttr attrHelpSection $ txt "LANGUAGE"
        , hBorder
        , settingRow "Active:" (languageName info)
-       , settingRow "Level:" (T.pack (show level) <> " (" <> learnerLevelDescription level <> ")")
+       , hBox
+           [ hLimit 14 $ withAttr attrModalKey $ txt $ "  Level:"
+           , txt " "
+           , txt $ T.pack (show level) <> " (" <> learnerLevelDescription level <> ") "
+           , withAttr attrHelpKey $ txt "[+/-]"
+           ]
        , settingRow "Variant:" (maybe "neutral" id (languageVariant info))
        , txt " "
        , withAttr attrHelpSection $ txt "PROVIDER"
@@ -133,13 +140,13 @@ renderSettingsModal st =
        , settingRow "Deck:" (ankiDefaultDeck (ankiConfig langMod))
        , settingRow "Status:" (if _asAnkiConnected st then "Connected" else "Disconnected")
        , txt " "
-       , hBorder
-       , padTop (Pad 1) $ hCenter $ keyHintRow
-           [ ("S", "Save")
-           , ("R", "Reload")
-           , ("E", "Edit prompts")
-           , ("Esc", "Close")
-           ]
+      , hBorder
+      , padTop (Pad 1) $ hCenter $ keyHintRow
+          [ ("S", "Save")
+          , ("R", "Reload")
+          , ("E", "View prompt")
+          , ("Esc", "Close")
+          ]
        ]
 
 -- | Render a settings row
@@ -274,6 +281,23 @@ renderErrorModal err =
   hLimit 60 $
   vBox
     [ padAll 1 $ withAttr attrError $ txtWrap $ displayError err
+    , txt " "
+    , hBorder
+    , padTop (Pad 1) $ hCenter $ txt "Press any key to close"
+    ]
+
+-- | Render system prompt preview modal
+renderPromptPreviewModal :: Text -> Widget Name
+renderPromptPreviewModal promptText =
+  centerLayer $
+  withAttr attrModalBorder $
+  withBorderStyle unicodeRounded $
+  borderWithLabel (withAttr attrModalTitle $ txt " System Prompt ") $
+  padAll 1 $
+  hLimit 70 $
+  vLimit 20 $
+  vBox
+    [ txtWrap promptText
     , txt " "
     , hBorder
     , padTop (Pad 1) $ hCenter $ txt "Press any key to close"

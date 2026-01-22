@@ -4,12 +4,15 @@
 
 ## Status
 
-**Phase 5 In Progress: Integration** (January 22, 2026)
+**Phase 5 Complete: Integration** (January 22, 2026)
 
 - Core TUI implemented and functional
 - LLM streaming working with OpenRouter
 - Database persistence operational
-- Basic chat functionality working
+- Session management fully functional
+- Settings modal with level cycling and prompt preview
+- Card generation with robust JSON parsing
+- Anki integration complete
 
 ## What is TAPIR?
 
@@ -27,6 +30,8 @@ A keyboard-driven TUI (Terminal User Interface) for language learning with:
 - **Streaming responses**: Real-time token display for natural interaction
 - **Local persistence**: SQLite stores your learning history
 - **Privacy-focused**: Works with OpenRouter, Anthropic, OpenAI, or local Ollama
+- **Full session management**: Create, list, load, delete sessions with message history
+- **Mode-specific prompts**: Each mode uses its own tailored system prompt
 
 ## Requirements
 
@@ -89,15 +94,28 @@ cabal run tapir
 
 | Key | Action |
 |-----|--------|
-| `Enter` | Send message |
+| **Navigation** |
 | `Tab` / `Shift+Tab` | Switch modes |
-| `1-4` | Jump to mode (Chat/Correct/Translate/Card) |
-| `F1` | Help |
-| `F2` | Settings |
-| `Ctrl+N` | New session |
-| `Ctrl+S` | Sessions list |
-| `Ctrl+Q` | Quit |
+| `1` / `2` / `3` / `4` | Jump to mode (Chat/Correct/Translate/Card) |
 | `PageUp/Down` | Scroll history |
+| **Actions** |
+| `Enter` | Send message |
+| `?` | Open help (when chat history has focus) |
+| **Sessions** |
+| `Ctrl+N` | New session |
+| `Ctrl+S` | Session list |
+| **Settings** |
+| `Ctrl+,` or `F2` | Open settings |
+| `+` / `-` | Cycle learner level (in settings) |
+| `E` | View system prompt for current mode (in settings) |
+| **Modals** |
+| `Esc` | Close modal |
+| `J` / `K` | Navigate session list |
+| `D` | Delete session (in session list) |
+| `N` | Create new session (in session list) |
+| **Quit** |
+| `Ctrl+Q` | Quit (with confirmation) |
+| `Ctrl+C` | Cancel / Quit |
 
 ### Modes
 
@@ -105,6 +123,8 @@ cabal run tapir
 2. **Correct** - Grammar correction with explanations
 3. **Translate** - Bidirectional translation
 4. **Card** - Generate Anki flashcards
+
+Each mode has a dedicated system prompt that instructs the LLM how to respond appropriately.
 
 ## Project Structure
 
@@ -152,24 +172,31 @@ TAPIR/
 - [x] Modal dialogs (Help, Settings, Sessions)
 - [x] Keyboard navigation
 
-### Phase 5: Integration (In Progress)
+### Phase 5: Integration (Complete)
 - [x] Wire LLM client to event loop
 - [x] Async streaming via BChan
-- [ ] Message persistence to database
-- [ ] Session management
-- [ ] Text wrapping improvements
+- [x] Message persistence to database
+- [x] Session management (create, list, load, delete)
+- [x] System prompt injection per mode
+- [x] Text wrapping with dynamic width
 
-### Phase 6: Features & Polish (Upcoming)
-- [ ] Full settings modal functionality
-- [ ] Card generation mode
-- [ ] Anki integration
-- [ ] UI polish and theming
+### Phase 6: Features & Polish (Complete)
+- [x] Full settings modal functionality (level cycling, prompt preview)
+- [x] Card generation mode with robust JSON parsing
+- [x] Anki integration (connection check, note push)
+- [x] UI polish (compact layout, dark theme)
+- [x] Error display (error modal, status bar notifications)
 
 ## Known Issues
 
-- **Text wrapping**: Long messages don't wrap properly yet
-- **Windows terminals**: Must use native Windows Terminal/PowerShell (not Git Bash)
-- **Settings modal**: Currently placeholder, API key must be set in config.yaml
+**None currently** - All reported issues have been resolved:
+- ✅ Text wrapping now works correctly with dynamic width calculation
+- ✅ Question mark (`?`) input works in text editor
+- ✅ Settings modal fully functional with level adjustment
+- ✅ Session management fully implemented (delete, new, load)
+- ✅ Card generation with robust JSON parsing and markdown fence handling
+
+**Note**: On some terminals, `Ctrl+,` may not work reliably for opening settings. Use `F2` as an alternative shortcut.
 
 ## Development
 
@@ -220,6 +247,6 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Project Status**: Active Development
+**Project Status**: Complete and Functional
 **Last Updated**: January 22, 2026
-**Phase**: 5/6 In Progress
+**Phase**: 6/6 Complete

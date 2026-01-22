@@ -110,6 +110,7 @@ data Modal
   | SessionsModal ![SessionSummary] !Int  -- ^ Session list with current index
   | CardPreviewModal !AnkiCard       -- ^ Card preview/edit before push
   | SettingsModal                    -- ^ Settings dialog
+  | PromptPreviewModal !Text          -- ^ System prompt preview modal
   | ConfirmQuitModal                 -- ^ Confirm quit dialog
   | ErrorModal !TapirError           -- ^ Error display modal
   deriving (Eq, Show)
