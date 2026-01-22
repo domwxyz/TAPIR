@@ -37,7 +37,7 @@ import Control.Exception (SomeException, try)
 import Control.Monad (void, when, unless)
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.Text as T
-import Data.Time (getCurrentTime)
+import Data.Time (getCurrentTime, UTCTime)
 import Data.UUID.V4 (nextRandom)
 import qualified Data.UUID as UUID
 import Database.SQLite.Simple (Connection)
@@ -49,6 +49,8 @@ import Lens.Micro.Mtl ((.=), (%=), use)
 import Tapir.Types
 import Tapir.Config.Types (AppConfig(..))
 import Tapir.Client.LLM
+import Tapir.Client.Anki (mkAnkiClient, checkConnection, addNote, AnkiNote(..), defaultNoteOptions)
+import Tapir.Db.Repository (createSession, saveMessage, saveCard, getRecentSessions, getSessionMessages, updateSessionTimestamp, markCardPushed)
 import Tapir.UI.Types
 import Tapir.UI.Attrs (tapirAttrMap)
 import Tapir.UI.Chat (renderChat)
@@ -128,6 +130,20 @@ mkInitialState config langMod client conn chan = do
         , sessionActive      = True
         }
 
+  -- Persist session to database
+  _ <- createSession conn session
+
+  -- Create Anki client
+  ankiClient <- mkAnkiClient
+
+  -- Check Anki connection status asynchronously
+  _ <- forkIO $ do
+    result <- checkConnection ankiClient
+    let connected = case result of
+          Right True -> True
+          _          -> False
+    writeBChan chan (EvAnkiStatusUpdate connected)
+
   pure AppState
     { _asSession        = session
     , _asMessages       = []
@@ -143,6 +159,7 @@ mkInitialState config langMod client conn chan = do
     , _asConfig         = config
     , _asLangModule     = langMod
     , _asLlmClient      = client
+    , _asAnkiClient     = ankiClient
     , _asDbConnection   = conn
     , _asEventChannel   = chan
     }
@@ -197,6 +214,7 @@ handleCustomEvent = \case
     st <- get
     let mode = _asCurrentMode st
         sid = sessionId (_asSession st)
+        conn = _asDbConnection st
     now <- liftIO getCurrentTime
     -- Create assistant message
     let msg = Message
@@ -211,15 +229,38 @@ handleCustomEvent = \case
           , messageTokensUsed = Nothing
           , messageError      = Nothing
           }
-    asMessages %= (++ [msg])
+
+    -- Save message to database
+    savedResult <- liftIO $ saveMessage conn msg
+    let savedMsg = case savedResult of
+          Right m -> m
+          Left _  -> msg
+
+    asMessages %= (++ [savedMsg])
     asRequestState .= Idle
     asStreamingText .= ""
 
+    -- Update session timestamp
+    _ <- liftIO $ updateSessionTimestamp conn sid
+
     -- Handle card extraction for card mode
     when (mode == CardGeneration) $ do
-      -- Card extraction would happen here
-      -- For now, just note that it needs implementation
-      pure ()
+      let langMod = _asLangModule st
+          langId = languageId (languageInfo langMod)
+          msgId = messageId savedMsg
+      -- Try to extract card from response
+      case extractCardFromResponse langId sid msgId fullResponse now of
+        Just card -> do
+          -- Save card to database
+          savedCardResult <- liftIO $ saveCard conn card
+          case savedCardResult of
+            Right savedCard -> do
+              asPendingCard .= Just savedCard
+              asModal .= CardPreviewModal savedCard
+            Left _ ->
+              -- Failed to save, still show preview
+              asPendingCard .= Just card
+        Nothing -> pure ()  -- No card found in response
 
   EvStreamError err -> do
     asRequestState .= RequestFailed err
@@ -286,6 +327,7 @@ handleMainEvent ev = case ev of
   EvKey (KChar 'n') [MCtrl] -> do
     st <- get
     let langMod = _asLangModule st
+        conn = _asDbConnection st
     newSid <- liftIO $ UUID.toText <$> nextRandom
     now <- liftIO getCurrentTime
     let newSession = Session
@@ -298,13 +340,30 @@ handleMainEvent ev = case ev of
           , sessionTitle       = Nothing
           , sessionActive      = True
           }
+
+    -- Persist new session to database
+    _ <- liftIO $ createSession conn newSession
+
     asSession .= newSession
     asMessages .= []
     asInputEditor .= mkInputEditor
 
   -- Sessions list
   EvKey (KChar 's') [MCtrl] -> do
-    -- Would trigger async load of sessions
+    st <- get
+    let conn = _asDbConnection st
+        chan = _asEventChannel st
+    -- Trigger async load of sessions
+    liftIO $ void $ forkIO $ do
+      result <- getRecentSessions conn 50
+      case result of
+        Right sessionsWithCount -> do
+          let summaries = map sessionToSummary sessionsWithCount
+          writeBChan chan (EvSessionsLoaded summaries)
+        Left _ ->
+          -- On error, show empty list
+          writeBChan chan (EvSessionsLoaded [])
+    -- Show modal immediately with loading state (empty list)
     asModal .= SessionsModal [] 0
 
   -- Show pending card
@@ -333,6 +392,7 @@ handleMainEvent ev = case ev of
       unless (isRequesting (_asRequestState st)) $ do
         let sid = sessionId (_asSession st)
             mode = _asCurrentMode st
+            conn = _asDbConnection st
         now <- liftIO getCurrentTime
         -- Create user message
         let msg = Message
@@ -347,16 +407,26 @@ handleMainEvent ev = case ev of
               , messageTokensUsed = Nothing
               , messageError      = Nothing
               }
-        asMessages %= (++ [msg])
+
+        -- Save message to database and get version with ID
+        savedResult <- liftIO $ saveMessage conn msg
+        let savedMsg = case savedResult of
+              Right m -> m
+              Left _  -> msg  -- On error, use original (will lose ID)
+
+        asMessages %= (++ [savedMsg])
         asInputEditor .= mkInputEditor
         asRequestState .= Requesting
         asLastError .= Nothing
+
+        -- Update session timestamp
+        _ <- liftIO $ updateSessionTimestamp conn sid
 
         -- Trigger async LLM request
         let chan = _asEventChannel st
             client = _asLlmClient st
             langMod = _asLangModule st
-        liftIO $ void $ forkIO $ sendLLMRequest st chan client langMod msg
+        liftIO $ void $ forkIO $ sendLLMRequest st chan client langMod savedMsg
 
         -- Scroll to bottom
         let vp = viewportScroll NameHistoryViewport
@@ -391,10 +461,38 @@ handleModalEvent ev = do
       EvKey (KChar 'e') [] -> asModal .= NoModal  -- TODO: Edit prompts
       _                    -> pure ()
 
-    CardPreviewModal _card -> case ev of
+    CardPreviewModal card -> case ev of
       EvKey KEsc []        -> asModal .= NoModal
       EvKey KEnter []      -> do
-        -- TODO: Push to Anki
+        -- Push card to Anki
+        let ankiClient = _asAnkiClient st
+            conn = _asDbConnection st
+            chan = _asEventChannel st
+
+        -- Convert AnkiCard to AnkiNote for the API
+        let note = AnkiNote
+              { anDeckName  = cardDeck card
+              , anModelName = "Basic"  -- Standard Anki note type
+              , anFront     = cardFront card
+              , anBack      = cardBack card
+              , anTags      = cardTags card
+              , anOptions   = defaultNoteOptions
+              }
+
+        -- Push to Anki asynchronously
+        liftIO $ void $ forkIO $ do
+          result <- addNote ankiClient note
+          case result of
+            Right noteId -> do
+              -- Mark card as pushed in database
+              case cardId card of
+                Just cid -> void $ markCardPushed conn cid noteId
+                Nothing  -> pure ()
+              writeBChan chan (EvCardPushResult (Right noteId))
+            Left err ->
+              writeBChan chan (EvCardPushResult (Left err))
+
+        -- Close modal (result will come via EvCardPushResult)
         asModal .= NoModal
       EvKey (KChar 'd') [] -> do
         asPendingCard .= Nothing
@@ -408,8 +506,35 @@ handleModalEvent ev = do
       EvKey (KChar 'k') [] -> asModal .= SessionsModal sums (max (idx - 1) 0)
       EvKey KUp []         -> asModal .= SessionsModal sums (max (idx - 1) 0)
       EvKey KEnter [] -> do
-        -- TODO: Load selected session
-        asModal .= NoModal
+        when (idx >= 0 && idx < length sums) $ do
+          let selectedSummary = sums !! idx
+              sid = summaryId selectedSummary
+              conn = _asDbConnection st
+              chan = _asEventChannel st
+
+          -- Load messages for the selected session asynchronously
+          liftIO $ void $ forkIO $ do
+            result <- getSessionMessages conn sid
+            case result of
+              Right msgs -> writeBChan chan (EvMessagesLoaded msgs)
+              Left _ -> writeBChan chan (EvMessagesLoaded [])
+
+          -- Update session info in state immediately
+          now <- liftIO getCurrentTime
+          let newSession = Session
+                { sessionId = sid
+                , sessionLanguageId = summaryLanguageId selectedSummary
+                , sessionMode = summaryMode selectedSummary
+                , sessionLearnerLevel = learnerLevel (_asLangModule st)
+                , sessionCreatedAt = now  -- Not accurate but placeholder
+                , sessionUpdatedAt = summaryLastActivity selectedSummary
+                , sessionTitle = Just (summaryTitle selectedSummary)
+                , sessionActive = True
+                }
+          asSession .= newSession
+          asCurrentMode .= summaryMode selectedSummary
+          asMessages .= []  -- Will be populated by EvMessagesLoaded
+          asModal .= NoModal
       _                    -> pure ()
 
     ErrorModal _ -> case ev of
@@ -474,3 +599,80 @@ sendLLMRequest st chan client _langMod userMsg = do
       }
 
     providerDefaultModel _cfg = "z-ai/glm-4.7"  -- TODO: Get from config
+
+-- ════════════════════════════════════════════════════════════════
+-- HELPER FUNCTIONS
+-- ════════════════════════════════════════════════════════════════
+
+-- | Convert a Session and message count to a SessionSummary
+sessionToSummary :: (Session, Int) -> SessionSummary
+sessionToSummary (sess, count) = SessionSummary
+  { summaryId = sessionId sess
+  , summaryTitle = case sessionTitle sess of
+      Just t  -> t
+      Nothing -> "Untitled Session"
+  , summaryLanguageId = sessionLanguageId sess
+  , summaryMode = sessionMode sess
+  , summaryMessageCount = count
+  , summaryLastActivity = sessionUpdatedAt sess
+  }
+
+-- | Extract a flashcard from an LLM response
+-- Looks for common patterns:
+-- 1. Labeled format: "Front: ...\nBack: ..."
+-- 2. Simple format: first line = front, rest = back
+extractCardFromResponse :: T.Text -> T.Text -> Maybe Int -> T.Text -> UTCTime -> Maybe AnkiCard
+extractCardFromResponse langId sessionId' sourceMsgId response now =
+  -- Try parsing patterns in order of preference
+  tryLabeledFormat `orElse` trySimpleFormat
+  where
+    -- Try "Front: ...\nBack: ..." format (case-insensitive)
+    tryLabeledFormat :: Maybe AnkiCard
+    tryLabeledFormat =
+      let lowerResponse = T.toLower response
+      in if "front:" `T.isInfixOf` lowerResponse && "back:" `T.isInfixOf` lowerResponse
+         then
+           -- Find the position of "back:" (case-insensitive)
+           let -- Split on "back:" (trying both cases)
+               (beforeBack, afterBack) =
+                 if "Back:" `T.isInfixOf` response
+                 then T.breakOn "Back:" response
+                 else T.breakOn "back:" response
+               -- Extract front: everything after "front:" up to "back:"
+               frontPart = snd $ T.breakOn ":" $ snd $ T.breakOn "ront:" beforeBack
+               frontText = T.strip $ T.drop 1 frontPart  -- Drop the ':'
+               -- Extract back: everything after "back:"
+               backText = T.strip $ T.drop 5 afterBack  -- Drop "Back:" or "back:"
+           in if T.null frontText || T.null backText
+              then Nothing
+              else Just $ mkCard frontText backText
+         else Nothing
+
+    -- Simple format: first non-empty line = front, rest = back
+    trySimpleFormat :: Maybe AnkiCard
+    trySimpleFormat =
+      let nonEmptyLines = filter (not . T.null . T.strip) (T.lines response)
+      in case nonEmptyLines of
+        (front:rest) | not (null rest) ->
+          Just $ mkCard (T.strip front) (T.strip $ T.intercalate "\n" rest)
+        _ -> Nothing
+
+    mkCard :: T.Text -> T.Text -> AnkiCard
+    mkCard front back = AnkiCard
+      { cardId          = Nothing
+      , cardSessionId   = sessionId'
+      , cardLanguageId  = langId
+      , cardFront       = front
+      , cardBack        = back
+      , cardTags        = [langId]  -- Default tag is the language
+      , cardDeck        = langId <> "::TAPIR"  -- Default deck
+      , cardSourceMsgId = sourceMsgId
+      , cardAnkiNoteId  = Nothing
+      , cardPushedAt    = Nothing
+      , cardCreatedAt   = now
+      }
+
+    -- Helper for Maybe alternation
+    orElse :: Maybe a -> Maybe a -> Maybe a
+    orElse Nothing b = b
+    orElse a       _ = a

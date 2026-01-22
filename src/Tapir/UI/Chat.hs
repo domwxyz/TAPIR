@@ -26,16 +26,60 @@ import Brick.Widgets.Center (hCenter)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time (UTCTime, formatTime, defaultTimeLocale)
+import Lens.Micro ((^.))
 
 import Tapir.Types
 import Tapir.UI.Types
 import Tapir.UI.Attrs
 import Tapir.UI.Widgets (titledBoxFocused)
 
--- | Helper to wrap text in a viewport-safe way
--- txtWrap is infinite-height, so we use txt with manual line breaks
+-- | Wrap text to a given width, returning multiple lines
+-- Handles word boundaries and preserves existing newlines
+wrapTextToWidth :: Int -> Text -> [Text]
+wrapTextToWidth width content
+  | width <= 0 = [content]
+  | T.null content = [""]
+  | otherwise  = concatMap (wrapLine width) (T.lines content)
+  where
+    -- Wrap a single line (no newlines) to the given width
+    wrapLine :: Int -> Text -> [Text]
+    wrapLine w line
+      | T.length line <= w = [line]
+      | otherwise = wrapWords w (T.words line) [] ""
+
+    -- Wrap words accumulating into lines
+    wrapWords :: Int -> [Text] -> [Text] -> Text -> [Text]
+    wrapWords _ [] acc current =
+      if T.null current then acc else acc ++ [current]
+    wrapWords w (word:rest) acc current
+      | T.null current =
+          -- Starting a new line
+          if T.length word > w
+            -- Word is longer than width, break it
+            then let (pre, post) = T.splitAt w word
+                 in wrapWords w (post:rest) (acc ++ [pre]) ""
+            else wrapWords w rest acc word
+      | T.length current + 1 + T.length word <= w =
+          -- Word fits on current line (with space)
+          wrapWords w rest acc (current <> " " <> word)
+      | otherwise =
+          -- Word doesn't fit, start new line
+          if T.length word > w
+            then let (pre, post) = T.splitAt w word
+                 in wrapWords w (post:rest) (acc ++ [current, pre]) ""
+            else wrapWords w rest (acc ++ [current]) word
+
+-- | Helper to wrap text in a viewport-safe way using Widget monad
+-- Uses the available context width to wrap text dynamically
 wrapText :: Text -> Widget n
-wrapText t = txt t
+wrapText t = Widget Fixed Fixed $ do
+    ctx <- getContext
+    -- Account for borders and padding (subtract 4 for safety margin)
+    let availWidth = max 20 (availWidth' ctx - 4)
+        wrapped = wrapTextToWidth availWidth t
+    render $ vBox $ map txt wrapped
+  where
+    availWidth' ctx = ctx ^. availWidthL
 
 -- ════════════════════════════════════════════════════════════════
 -- MAIN CHAT WIDGET

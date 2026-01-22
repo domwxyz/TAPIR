@@ -48,6 +48,7 @@ module Tapir.UI.Types
   , asConfig
   , asLangModule
   , asLlmClient
+  , asAnkiClient
   , asDbConnection
   , asEventChannel
 
@@ -60,7 +61,6 @@ module Tapir.UI.Types
 
 import Brick.BChan (BChan)
 import Brick.Widgets.Edit (Editor)
-import Control.Concurrent.STM (TVar)
 import Data.Text (Text)
 import Data.Time (UTCTime)
 import Database.SQLite.Simple (Connection)
@@ -69,6 +69,7 @@ import Lens.Micro.TH (makeLenses)
 import Tapir.Types
 import Tapir.Config.Types (AppConfig)
 import Tapir.Client.LLM (LLMClient)
+import Tapir.Client.Anki (AnkiClient)
 
 -- ════════════════════════════════════════════════════════════════
 -- RESOURCE NAMES
@@ -189,6 +190,7 @@ data AppState = AppState
   , _asConfig         :: !AppConfig            -- ^ Main configuration
   , _asLangModule     :: !LanguageModule       -- ^ Active language module
   , _asLlmClient      :: !LLMClient            -- ^ LLM client instance
+  , _asAnkiClient     :: !AnkiClient           -- ^ Anki client instance
   , _asDbConnection   :: !Connection           -- ^ Database connection
   , _asEventChannel   :: !(BChan TapirEvent)   -- ^ Event channel for async ops
   }

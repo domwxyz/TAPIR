@@ -52,6 +52,7 @@ library
     Tapir.Client.LLM
     Tapir.Client.LLM.Types
     Tapir.Client.LLM.OpenRouter
+    Tapir.Client.Anki
     Tapir.UI.Types
     Tapir.UI.Attrs
     Tapir.UI.Widgets
