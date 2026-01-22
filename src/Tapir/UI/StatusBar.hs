@@ -30,101 +30,90 @@ import Tapir.UI.Attrs
 -- STATUS BAR
 -- ════════════════════════════════════════════════════════════════
 
--- | Render the complete status bar (two lines)
+-- | Render the complete status bar (single compact line)
 renderStatusBar :: AppState -> Widget Name
 renderStatusBar st =
-  vBox
-    [ renderStatusLine st
-    , renderKeyHints st
-    ]
-
--- | Render the main status line
-renderStatusLine :: AppState -> Widget Name
-renderStatusLine st =
-  withAttr attrStatusBar $
+  vLimit 1 $
   hBox
-    [ renderModeTabs st
-    , txt " │ "
-    , renderAnkiStatus (_asAnkiConnected st)
-    , txt " │ "
-    , renderLanguageInfo st
+    [ withAttr attrStatusBarLeft $ hBox
+        [ txt " "
+        , renderModeIndicator st
+        , txt "  "
+        , renderLanguageCompact st
+        ]
     , fill ' '
-    , renderModelInfo st
-    , txt " "
+    , withAttr attrStatusBarRight $ hBox
+        [ renderErrorOrHints st
+        , txt "  "
+        , renderAnkiIndicator (_asAnkiConnected st)
+        , txt "  "
+        , renderModelCompact st
+        , txt " "
+        ]
     ]
 
--- | Render the key hints line
-renderKeyHints :: AppState -> Widget Name
-renderKeyHints st =
-  let errorWidget = case _asLastError st of
-        Just err -> withAttr attrStatusError $ txt $ " " <> shortError err <> " "
-        Nothing  -> emptyWidget
-  in withAttr attrStatusBar $
-     hBox
-       [ txt " "
-       , renderHintText
-       , fill ' '
-       , errorWidget
-       ]
+-- | Compact mode indicator (just shows current mode)
+renderModeIndicator :: AppState -> Widget Name
+renderModeIndicator st =
+  let mode = _asCurrentMode st
+      modeName = case mode of
+        Conversation   -> "chat"
+        Correction     -> "correct"
+        Translation    -> "translate"
+        CardGeneration -> "card"
+        CustomMode n   -> n
+  in withAttr attrStatusModeActive $ txt modeName
 
--- ════════════════════════════════════════════════════════════════
--- MODE TABS
--- ════════════════════════════════════════════════════════════════
-
--- | Render mode tabs with current mode highlighted
-renderModeTabs :: AppState -> Widget Name
-renderModeTabs st =
-  let currentMode = _asCurrentMode st
-      modes' = [ (Conversation, "Chat", '1')
-               , (Correction, "Correct", '2')
-               , (Translation, "Translate", '3')
-               , (CardGeneration, "Card", '4')
-               ]
-  in hBox $ map (renderModeTab currentMode) modes'
-
--- | Render a single mode tab
-renderModeTab :: Mode -> (Mode, Text, Char) -> Widget Name
-renderModeTab current (mode, label, _key) =
-  let isActive = current == mode
-      attr = if isActive then attrStatusModeActive else attrStatusMode
-      prefix = if isActive then "[" else " "
-      suffix = if isActive then "]" else " "
-  in withAttr attr $ txt $ prefix <> label <> suffix
-
--- ════════════════════════════════════════════════════════════════
--- STATUS COMPONENTS
--- ════════════════════════════════════════════════════════════════
-
--- | Render Anki connection status
-renderAnkiStatus :: Bool -> Widget Name
-renderAnkiStatus connected =
-  let (attr, symbol) = if connected
-        then (attrStatusAnkiOn, "● Anki")
-        else (attrStatusAnkiOff, "○ Anki")
-  in withAttr attr $ txt symbol
-
--- | Render language and level info
-renderLanguageInfo :: AppState -> Widget Name
-renderLanguageInfo st =
+-- | Compact language display
+renderLanguageCompact :: AppState -> Widget Name
+renderLanguageCompact st =
   let langMod = _asLangModule st
       langName' = languageNativeName (languageInfo langMod)
       level = learnerLevel langMod
       levelText = T.pack $ show level
-  in hBox
-       [ withAttr attrStatusLanguage $ txt langName'
-       , txt " ("
-       , withAttr attrStatusLevel $ txt levelText
-       , txt ")"
-       ]
+  in withAttr attrStatusLanguage $ txt $ langName' <> " " <> levelText
 
--- | Render model info
-renderModelInfo :: AppState -> Widget Name
-renderModelInfo _st =
-  -- For now, show a placeholder. In full implementation,
-  -- this would come from the provider config
-  withAttr attrStatusModel $ txt "z-ai/glm-4.7"
+-- | Compact model display
+renderModelCompact :: AppState -> Widget Name
+renderModelCompact _st =
+  withAttr attrStatusModel $ txt "glm-4.7"
 
--- | Render key hint text
-renderHintText :: Widget Name
-renderHintText =
-  txt "F1:Help Tab:Mode ^,:Settings ^N:New ^S:Sessions ^A:Card ^Q:Quit"
+-- | Compact Anki indicator
+renderAnkiIndicator :: Bool -> Widget Name
+renderAnkiIndicator connected =
+  if connected
+    then withAttr attrStatusAnkiOn $ txt "anki"
+    else withAttr attrStatusAnkiOff $ txt "anki"
+
+-- | Show error if present, otherwise show abbreviated hints
+renderErrorOrHints :: AppState -> Widget Name
+renderErrorOrHints st =
+  case _asLastError st of
+    Just err -> withAttr attrStatusError $ txt $ shortError err
+    Nothing  -> withAttr attrStatusHint $ txt "tab modes  ?help"
+
+-- ════════════════════════════════════════════════════════════════
+-- LEGACY EXPORTS (for compatibility)
+-- ════════════════════════════════════════════════════════════════
+
+-- | Render key hints (legacy, now integrated into main bar)
+renderKeyHints :: AppState -> Widget Name
+renderKeyHints _ = emptyWidget
+
+-- | Render mode tabs with current mode highlighted (legacy)
+renderModeTabs :: AppState -> Widget Name
+renderModeTabs st =
+  let currentMode = _asCurrentMode st
+      modes' = [ (Conversation, "chat")
+               , (Correction, "correct")
+               , (Translation, "translate")
+               , (CardGeneration, "card")
+               ]
+  in hBox $ map (renderModeTab currentMode) modes'
+
+-- | Render a single mode tab
+renderModeTab :: Mode -> (Mode, Text) -> Widget Name
+renderModeTab current (mode, label) =
+  let isActive = current == mode
+      attr = if isActive then attrStatusModeActive else attrStatusMode
+  in withAttr attr $ txt $ " " <> label <> " "

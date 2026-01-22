@@ -52,7 +52,7 @@ import Tapir.Client.LLM
 import Tapir.Client.Anki (mkAnkiClient, checkConnection, addNote, AnkiNote(..), defaultNoteOptions)
 import Tapir.Db.Repository (createSession, saveMessage, saveCard, getRecentSessions, getSessionMessages, updateSessionTimestamp, markCardPushed)
 import Tapir.UI.Types
-import Tapir.UI.Attrs (tapirAttrMap)
+import Tapir.UI.Attrs (tapirAttrMap, attrBorder)
 import Tapir.UI.Chat (renderChat)
 import Tapir.UI.Input (renderInput, getEditorContent, mkInputEditor)
 import Tapir.UI.StatusBar (renderStatusBar)
@@ -171,10 +171,20 @@ mkInitialState config langMod client conn chan = do
 -- | Draw the entire UI
 drawUI :: AppState -> [Widget Name]
 drawUI st =
-  let mainUI = vBox
-        [ renderChat st
-        , renderInput st
-        , renderStatusBar st
+  let -- Chat takes most of the screen
+      chatArea = renderChat st
+      -- Thin separator line
+      separator = withAttr attrBorder $ vLimit 1 $ fill '─'
+      -- Compact input area (2-3 lines)
+      inputArea = renderInput st
+      -- Single-line status bar at bottom
+      statusBar = renderStatusBar st
+      -- Main layout: chat fills remaining space, input and status at bottom
+      mainUI = vBox
+        [ chatArea
+        , separator
+        , inputArea
+        , statusBar
         ]
       modalOverlay = renderModal st
   in [modalOverlay, mainUI]

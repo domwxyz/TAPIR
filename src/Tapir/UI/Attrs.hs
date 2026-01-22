@@ -41,6 +41,8 @@ module Tapir.UI.Attrs
 
     -- ** Status Bar
   , attrStatusBar
+  , attrStatusBarLeft
+  , attrStatusBarRight
   , attrStatusMode
   , attrStatusModeActive
   , attrStatusLanguage
@@ -49,6 +51,7 @@ module Tapir.UI.Attrs
   , attrStatusAnkiOff
   , attrStatusModel
   , attrStatusError
+  , attrStatusHint
 
     -- ** Modals
   , attrModalBorder
@@ -104,10 +107,13 @@ attrEditorFocus = attrName "editorFocus"
 attrPlaceholder = attrName "placeholder"
 
 -- Status Bar
-attrStatusBar, attrStatusMode, attrStatusModeActive :: AttrName
+attrStatusBar, attrStatusBarLeft, attrStatusBarRight :: AttrName
+attrStatusMode, attrStatusModeActive :: AttrName
 attrStatusLanguage, attrStatusLevel, attrStatusAnkiOn :: AttrName
-attrStatusAnkiOff, attrStatusModel, attrStatusError :: AttrName
+attrStatusAnkiOff, attrStatusModel, attrStatusError, attrStatusHint :: AttrName
 attrStatusBar        = attrName "status" <> attrName "bar"
+attrStatusBarLeft    = attrName "status" <> attrName "barLeft"
+attrStatusBarRight   = attrName "status" <> attrName "barRight"
 attrStatusMode       = attrName "status" <> attrName "mode"
 attrStatusModeActive = attrName "status" <> attrName "modeActive"
 attrStatusLanguage   = attrName "status" <> attrName "language"
@@ -116,6 +122,7 @@ attrStatusAnkiOn     = attrName "status" <> attrName "ankiOn"
 attrStatusAnkiOff    = attrName "status" <> attrName "ankiOff"
 attrStatusModel      = attrName "status" <> attrName "model"
 attrStatusError      = attrName "status" <> attrName "error"
+attrStatusHint       = attrName "status" <> attrName "hint"
 
 -- Modals
 attrModalBorder, attrModalTitle, attrModalKey, attrModalDescription :: AttrName
@@ -171,16 +178,19 @@ defaultAttrMap = attrMap defAttr
   , (attrEditorFocus, white `on` brightBlack)
   , (attrPlaceholder, fg brightBlack)
 
-    -- Status Bar
-  , (attrStatusBar,        black `on` white)
-  , (attrStatusMode,       black `on` white)
-  , (attrStatusModeActive, withStyle (black `on` cyan) bold)
-  , (attrStatusLanguage,   withStyle (black `on` white) bold)
-  , (attrStatusLevel,      black `on` white)
-  , (attrStatusAnkiOn,     withStyle (black `on` green) bold)
-  , (attrStatusAnkiOff,    black `on` red)
+    -- Status Bar (compact, dark theme)
+  , (attrStatusBar,        fg brightBlack)
+  , (attrStatusBarLeft,    fg brightBlack)
+  , (attrStatusBarRight,   fg brightBlack)
+  , (attrStatusMode,       fg brightBlack)
+  , (attrStatusModeActive, withStyle (fg cyan) bold)
+  , (attrStatusLanguage,   fg magenta)
+  , (attrStatusLevel,      fg brightBlack)
+  , (attrStatusAnkiOn,     fg green)
+  , (attrStatusAnkiOff,    fg brightBlack)
   , (attrStatusModel,      fg brightBlack)
-  , (attrStatusError,      withStyle (white `on` red) bold)
+  , (attrStatusError,      fg red)
+  , (attrStatusHint,       fg brightBlack)
 
     -- Modals
   , (attrModalBorder,      fg cyan)

@@ -27,33 +27,47 @@ import Data.Text.Zipper (textZipper)
 import Tapir.Types (Mode(..))
 import Tapir.UI.Types
 import Tapir.UI.Attrs
-import Tapir.UI.Widgets (titledBoxFocused)
 
 -- ════════════════════════════════════════════════════════════════
 -- INPUT WIDGET
 -- ════════════════════════════════════════════════════════════════
 
--- | Render the input editor widget
+-- | Render the input editor widget (compact, borderless design)
 renderInput :: AppState -> Widget Name
 renderInput st =
   let focused = _asFocus st == FocusInput
       editorWidget = renderEditor (txt . T.unlines) focused (_asInputEditor st)
-      title = "Input"
-      -- Show placeholder if editor is empty
+      prompt = renderPrompt st
+      -- Show placeholder if editor is empty, otherwise show editor
       content = if isEditorEmpty (_asInputEditor st)
-        then vLimit 3 $ renderPlaceholder st
-        else vLimit 5 editorWidget
-  in titledBoxFocused focused title content
+        then renderPlaceholder st
+        else editorWidget
+      -- Compact input area: prompt > content (2-3 lines max)
+  in vLimit 3 $ hBox
+       [ prompt
+       , padLeft (Pad 1) content
+       ]
+
+-- | Render the input prompt indicator (shows current mode)
+renderPrompt :: AppState -> Widget Name
+renderPrompt st =
+  let promptChar = case _asCurrentMode st of
+        Conversation   -> ">"
+        Correction     -> "✓"
+        Translation    -> "→"
+        CardGeneration -> "+"
+        CustomMode _   -> ">"
+  in withAttr attrStatusModeActive $ txt promptChar
 
 -- | Render placeholder text when editor is empty
 renderPlaceholder :: AppState -> Widget Name
 renderPlaceholder st =
   let modeHint = case _asCurrentMode st of
-        Conversation -> "Type a message to practice conversation..."
-        Correction   -> "Enter text to correct..."
-        Translation  -> "Enter text to translate..."
-        CardGeneration -> "Enter a word or phrase to create a card..."
-        CustomMode name -> "Enter input for " <> name <> "..."
+        Conversation   -> "Type to chat..."
+        Correction     -> "Enter text to correct..."
+        Translation    -> "Enter text to translate..."
+        CardGeneration -> "Word or phrase for card..."
+        CustomMode _   -> "Enter input..."
   in withAttr attrPlaceholder $ txt modeHint
 
 -- ════════════════════════════════════════════════════════════════

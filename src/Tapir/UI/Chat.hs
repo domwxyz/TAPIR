@@ -31,7 +31,6 @@ import Lens.Micro ((^.))
 import Tapir.Types
 import Tapir.UI.Types
 import Tapir.UI.Attrs
-import Tapir.UI.Widgets (titledBoxFocused)
 
 -- | Wrap text to a given width, returning multiple lines
 -- Handles word boundaries and preserves existing newlines
@@ -85,13 +84,12 @@ wrapText t = Widget Fixed Fixed $ do
 -- MAIN CHAT WIDGET
 -- ════════════════════════════════════════════════════════════════
 
--- | Render the complete chat widget with history viewport
+-- | Render the complete chat widget with history viewport (no border)
 renderChat :: AppState -> Widget Name
 renderChat st =
-  let focused = _asFocus st == FocusHistory
-      title = "History"
-      content = renderChatHistory st
-  in titledBoxFocused focused title $
+  let content = renderChatHistory st
+  -- Chat area takes all available space above input
+  in padLeftRight 1 $
      viewport NameHistoryViewport Vertical content
 
 -- | Render chat history (all messages + streaming if active)
