@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cabal update:*)",
+      "Bash(cabal build:*)",
+      "Bash(hpack:*)",
+      "Bash(cabal clean:*)",
+      "Bash(cabal run:*)",
+      "Bash(cabal test)",
+      "Bash(cabal install:*)",
+      "Bash(cabal test:*)",
+      "Bash(cabal repl:*)",
+      "Bash(cabal list-bin:*)"
+    ]
+  }
+}

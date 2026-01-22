@@ -1,0 +1,131 @@
+cabal-version: 2.2
+name: tapir
+version: 1.0.0
+synopsis: Language-agnostic terminal-based language learning assistant
+description:
+  TAPIR (Translation API Router) is a keyboard-driven TUI for language learning
+  with conversation practice, grammar correction, translation, and Anki integration.
+homepage: https://github.com/yourusername/tapir
+license: MIT
+license-file: LICENSE
+author: Dani Cusanelli
+maintainer: your@email.com
+copyright: 2026 Dani Cusanelli
+category: Education
+build-type: Simple
+extra-source-files:
+  README.md
+  CHANGELOG.md
+
+common shared-properties
+  default-language: Haskell2010
+  default-extensions:
+    OverloadedStrings
+    DeriveGeneric
+    DerivingStrategies
+    GeneralizedNewtypeDeriving
+    RecordWildCards
+    LambdaCase
+    TypeApplications
+  ghc-options:
+    -Wall
+    -Wcompat
+    -Widentities
+    -Wincomplete-record-updates
+    -Wincomplete-uni-patterns
+    -Wpartial-fields
+    -Wredundant-constraints
+
+library
+  import: shared-properties
+  hs-source-dirs: src
+  exposed-modules:
+    Tapir.Types
+    Tapir.Types.Mode
+    Tapir.Types.Language
+    Tapir.Types.Provider
+    Tapir.Config.Types
+    Tapir.Config.Loader
+    Tapir.Config.Defaults
+    Tapir.Db.Schema
+    Tapir.Db.Repository
+    Tapir.Client.LLM
+    Tapir.Client.LLM.Types
+    Tapir.Client.LLM.OpenRouter
+    Tapir.UI.Types
+    Tapir.UI.Attrs
+    Tapir.UI.Widgets
+    Tapir.UI.Chat
+    Tapir.UI.Input
+    Tapir.UI.StatusBar
+    Tapir.UI.Modals
+    Tapir.UI.App
+  build-depends:
+      base >=4.17 && <5
+    , text >=2.0 && <2.2
+    , bytestring >=0.11 && <0.13
+    , containers >=0.6 && <0.8
+    , time >=1.12 && <1.15
+    , uuid >=1.3 && <1.4
+    , brick >=2.1 && <2.5
+    , vty >=6.0 && <6.3
+    , vty-crossplatform >=0.1 && <0.5
+    , microlens >=0.4 && <0.5
+    , microlens-th >=0.4 && <0.5
+    , microlens-mtl >=0.2 && <0.3
+    , aeson >=2.1 && <2.3
+    , aeson-pretty >=0.8 && <0.9
+    , http-client >=0.7 && <0.8
+    , http-client-tls >=0.3 && <0.4
+    , http-types >=0.12 && <0.13
+    , sqlite-simple >=0.4 && <0.5
+    , optparse-applicative >=0.18 && <0.19
+    , directory >=1.3 && <1.4
+    , filepath >=1.4 && <1.6
+    , yaml >=0.11 && <0.12
+    , mtl >=2.3 && <2.4
+    , transformers >=0.6 && <0.7
+    , exceptions >=0.10 && <0.11
+    , async >=2.2 && <2.3
+    , stm >=2.5 && <2.6
+    , word-wrap >=0.5 && <0.6
+    , vector >=0.13 && <0.14
+    , unordered-containers >=0.2 && <0.3
+    , text-zipper >=0.13 && <0.14
+
+executable tapir
+  import: shared-properties
+  main-is: Main.hs
+  hs-source-dirs: app
+  ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.17 && <5
+    , tapir
+    , text
+    , sqlite-simple
+    , directory
+    , filepath
+
+test-suite tapir-test
+  import: shared-properties
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  hs-source-dirs: test
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.17 && <5
+    , tapir
+    , hspec >=2.10 && <2.12
+    , hspec-discover >=2.10 && <2.12
+    , QuickCheck >=2.14 && <2.16
+    , text
+    , time
+    , sqlite-simple
+    , aeson
+    , bytestring
+  build-tool-depends:
+    hspec-discover:hspec-discover >=2.10 && <2.12
+  other-modules:
+    Tapir.Config.LoaderSpec
+    Tapir.Db.RepositorySpec
+    Tapir.Client.LLM.TypesSpec

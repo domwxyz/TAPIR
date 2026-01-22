@@ -1,0 +1,551 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators #-}
+
+-- |
+-- Module      : Tapir.Db.Repository
+-- Description : Database operations for TAPIR entities
+-- Copyright   : (c) 2026 Dani Cusanelli
+-- License     : MIT
+--
+-- This module implements the repository pattern for database operations,
+-- providing CRUD operations for sessions, messages, and cards.
+-- All functions use parameterized queries to prevent SQL injection.
+
+module Tapir.Db.Repository
+  ( -- * Session Operations
+    createSession
+  , getSession
+  , updateSession
+  , updateSessionTimestamp
+  , setSessionTitle
+  , archiveSession
+  , deleteSession
+  , listSessions
+  , listActiveSessions
+  , getRecentSessions
+
+    -- * Message Operations
+  , saveMessage
+  , getMessage
+  , getSessionMessages
+  , getMessageHistory
+  , deleteMessage
+
+    -- * Card Operations
+  , saveCard
+  , getCard
+  , getSessionCards
+  , getUnpushedCards
+  , markCardPushed
+  , deleteCard
+
+    -- * Utility
+  , withTransaction
+  ) where
+
+import Control.Exception (try, SomeException)
+import Data.Aeson (encode, decode)
+import Data.Text (Text)
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
+import qualified Data.ByteString.Lazy as BL
+import Data.Time (UTCTime, getCurrentTime)
+import Data.Time.Format.ISO8601 (iso8601Show, iso8601ParseM)
+import Database.SQLite.Simple hiding (withTransaction)
+import Database.SQLite.Simple.ToField
+import Database.SQLite.Simple.FromField
+
+import Tapir.Types
+
+-- ════════════════════════════════════════════════════════════════
+-- HELPER INSTANCES FOR SQLITE
+-- ════════════════════════════════════════════════════════════════
+
+-- | Store Role as text
+instance ToField Role where
+  toField = toField . roleToText
+
+instance FromField Role where
+  fromField f = do
+    txt <- fromField f
+    case textToRole txt of
+      Just r  -> pure r
+      Nothing -> returnError ConversionFailed f "Invalid role"
+
+-- | Store Mode as text
+instance ToField Mode where
+  toField = toField . modeToText
+
+instance FromField Mode where
+  fromField f = do
+    txt <- fromField f
+    pure $ textToMode txt
+
+-- | Store LearnerLevel as text
+instance ToField LearnerLevel where
+  toField = toField . T.pack . show
+
+instance FromField LearnerLevel where
+  fromField f = do
+    txt <- fromField @Text f
+    case txt of
+      "A1" -> pure A1
+      "A2" -> pure A2
+      "B1" -> pure B1
+      "B2" -> pure B2
+      "C1" -> pure C1
+      "C2" -> pure C2
+      _    -> returnError ConversionFailed f "Invalid learner level"
+
+-- | Store UTCTime as ISO 8601 text
+utcToText :: UTCTime -> Text
+utcToText = T.pack . iso8601Show
+
+textToUtc :: Text -> Maybe UTCTime
+textToUtc = iso8601ParseM . T.unpack
+
+-- | Store [Text] as JSON array
+tagsToText :: [Text] -> Text
+tagsToText tags = TE.decodeUtf8 $ BL.toStrict $ encode tags
+
+textToTags :: Text -> [Text]
+textToTags txt =
+  case decode (BL.fromStrict $ TE.encodeUtf8 txt) of
+    Just tags -> tags
+    Nothing   -> []
+
+-- ════════════════════════════════════════════════════════════════
+-- SESSION OPERATIONS
+-- ════════════════════════════════════════════════════════════════
+
+-- | Create a new session
+createSession :: Connection -> Session -> IO (Either TapirError Session)
+createSession conn session = do
+  result <- try $ execute conn
+    "INSERT INTO sessions (id, language_id, mode, learner_level, created_at, updated_at, title, active) \
+    \VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    ( sessionId session
+    , sessionLanguageId session
+    , sessionMode session
+    , sessionLearnerLevel session
+    , utcToText $ sessionCreatedAt session
+    , utcToText $ sessionUpdatedAt session
+    , sessionTitle session
+    , sessionActive session
+    )
+  case result of
+    Left (e :: SomeException) -> pure $ Left $ DatabaseError $ T.pack $ show e
+    Right () -> pure $ Right session
+
+-- | Get a session by ID
+getSession :: Connection -> Text -> IO (Either TapirError (Maybe Session))
+getSession conn sid = do
+  result <- try $ query conn
+    "SELECT id, language_id, mode, learner_level, created_at, updated_at, title, active \
+    \FROM sessions WHERE id = ?"
+    (Only sid)
+    :: IO (Either SomeException [(Text, Text, Mode, LearnerLevel, Text, Text, Maybe Text, Bool)])
+  case result of
+    Left e -> pure $ Left $ DatabaseError $ T.pack $ show e
+    Right [] -> pure $ Right Nothing
+    Right ((sid', langId, mode, level, createdAt, updatedAt, title, active):_) ->
+      case (textToUtc createdAt, textToUtc updatedAt) of
+        (Just ca, Just ua) -> pure $ Right $ Just Session
+          { sessionId = sid'
+          , sessionLanguageId = langId
+          , sessionMode = mode
+          , sessionLearnerLevel = level
+          , sessionCreatedAt = ca
+          , sessionUpdatedAt = ua
+          , sessionTitle = title
+          , sessionActive = active
+          }
+        _ -> pure $ Left $ DatabaseError "Invalid timestamp in session"
+
+-- | Update a session
+updateSession :: Connection -> Session -> IO (Either TapirError ())
+updateSession conn session = do
+  result <- try $ execute conn
+    "UPDATE sessions SET language_id = ?, mode = ?, learner_level = ?, \
+    \updated_at = ?, title = ?, active = ? WHERE id = ?"
+    ( sessionLanguageId session
+    , sessionMode session
+    , sessionLearnerLevel session
+    , utcToText $ sessionUpdatedAt session
+    , sessionTitle session
+    , sessionActive session
+    , sessionId session
+    )
+  case result of
+    Left (e :: SomeException) -> pure $ Left $ DatabaseError $ T.pack $ show e
+    Right () -> pure $ Right ()
+
+-- | Update session timestamp only
+updateSessionTimestamp :: Connection -> Text -> IO (Either TapirError ())
+updateSessionTimestamp conn sid = do
+  now <- getCurrentTime
+  result <- try $ execute conn
+    "UPDATE sessions SET updated_at = ? WHERE id = ?"
+    (utcToText now, sid)
+  case result of
+    Left (e :: SomeException) -> pure $ Left $ DatabaseError $ T.pack $ show e
+    Right () -> pure $ Right ()
+
+-- | Set session title
+setSessionTitle :: Connection -> Text -> Text -> IO (Either TapirError ())
+setSessionTitle conn sid title = do
+  now <- getCurrentTime
+  result <- try $ execute conn
+    "UPDATE sessions SET title = ?, updated_at = ? WHERE id = ?"
+    (title, utcToText now, sid)
+  case result of
+    Left (e :: SomeException) -> pure $ Left $ DatabaseError $ T.pack $ show e
+    Right () -> pure $ Right ()
+
+-- | Archive a session (set active = 0)
+archiveSession :: Connection -> Text -> IO (Either TapirError ())
+archiveSession conn sid = do
+  result <- try $ execute conn
+    "UPDATE sessions SET active = 0 WHERE id = ?"
+    (Only sid)
+  case result of
+    Left (e :: SomeException) -> pure $ Left $ DatabaseError $ T.pack $ show e
+    Right () -> pure $ Right ()
+
+-- | Delete a session (cascades to messages and cards)
+deleteSession :: Connection -> Text -> IO (Either TapirError ())
+deleteSession conn sid = do
+  result <- try $ execute conn
+    "DELETE FROM sessions WHERE id = ?"
+    (Only sid)
+  case result of
+    Left (e :: SomeException) -> pure $ Left $ DatabaseError $ T.pack $ show e
+    Right () -> pure $ Right ()
+
+-- | List all sessions (including archived)
+listSessions :: Connection -> IO (Either TapirError [Session])
+listSessions conn = do
+  result <- try $ query_ conn
+    "SELECT id, language_id, mode, learner_level, created_at, updated_at, title, active \
+    \FROM sessions ORDER BY updated_at DESC"
+    :: IO (Either SomeException [(Text, Text, Mode, LearnerLevel, Text, Text, Maybe Text, Bool)])
+  case result of
+    Left e -> pure $ Left $ DatabaseError $ T.pack $ show e
+    Right rows -> pure $ Right $ rowsToSessions rows
+
+-- | List active sessions only
+listActiveSessions :: Connection -> IO (Either TapirError [Session])
+listActiveSessions conn = do
+  result <- try $ query_ conn
+    "SELECT id, language_id, mode, learner_level, created_at, updated_at, title, active \
+    \FROM sessions WHERE active = 1 ORDER BY updated_at DESC"
+    :: IO (Either SomeException [(Text, Text, Mode, LearnerLevel, Text, Text, Maybe Text, Bool)])
+  case result of
+    Left e -> pure $ Left $ DatabaseError $ T.pack $ show e
+    Right rows -> pure $ Right $ rowsToSessions rows
+
+-- | Get recent sessions with message count (using view)
+getRecentSessions :: Connection -> Int -> IO (Either TapirError [(Session, Int)])
+getRecentSessions conn limit = do
+  result <- try $ query conn
+    "SELECT id, language_id, mode, learner_level, title, created_at, updated_at, message_count \
+    \FROM v_recent_sessions LIMIT ?"
+    (Only limit)
+    :: IO (Either SomeException [(Text, Text, Mode, LearnerLevel, Maybe Text, Text, Text, Int)])
+  case result of
+    Left e -> pure $ Left $ DatabaseError $ T.pack $ show e
+    Right rows -> pure $ Right $ rowsToSessionsWithCount rows
+
+-- | Helper: Convert rows to Session list
+rowsToSessions :: [(Text, Text, Mode, LearnerLevel, Text, Text, Maybe Text, Bool)] -> [Session]
+rowsToSessions = foldr go []
+  where
+    go (sid, langId, mode, level, createdAt, updatedAt, title, active) acc =
+      case (textToUtc createdAt, textToUtc updatedAt) of
+        (Just ca, Just ua) -> Session
+          { sessionId = sid
+          , sessionLanguageId = langId
+          , sessionMode = mode
+          , sessionLearnerLevel = level
+          , sessionCreatedAt = ca
+          , sessionUpdatedAt = ua
+          , sessionTitle = title
+          , sessionActive = active
+          } : acc
+        _ -> acc
+
+-- | Helper: Convert rows to Session with message count
+rowsToSessionsWithCount :: [(Text, Text, Mode, LearnerLevel, Maybe Text, Text, Text, Int)] -> [(Session, Int)]
+rowsToSessionsWithCount = foldr go []
+  where
+    go (sid, langId, mode, level, title, createdAt, updatedAt, msgCount) acc =
+      case (textToUtc createdAt, textToUtc updatedAt) of
+        (Just ca, Just ua) ->
+          ( Session
+              { sessionId = sid
+              , sessionLanguageId = langId
+              , sessionMode = mode
+              , sessionLearnerLevel = level
+              , sessionCreatedAt = ca
+              , sessionUpdatedAt = ua
+              , sessionTitle = title
+              , sessionActive = True  -- from view, always active
+              }
+          , msgCount
+          ) : acc
+        _ -> acc
+
+-- ════════════════════════════════════════════════════════════════
+-- MESSAGE OPERATIONS
+-- ════════════════════════════════════════════════════════════════
+
+-- | Save a new message (returns message with generated ID)
+saveMessage :: Connection -> Message -> IO (Either TapirError Message)
+saveMessage conn msg = do
+  result <- try $ do
+    execute conn
+      "INSERT INTO messages (session_id, role, content, mode, timestamp, model, provider, tokens_used, error) \
+      \VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      ( messageSessionId msg
+      , messageRole msg
+      , messageContent msg
+      , messageMode msg
+      , utcToText $ messageTimestamp msg
+      , messageModel msg
+      , messageProvider msg
+      , messageTokensUsed msg
+      , messageError msg
+      )
+    lastId <- lastInsertRowId conn
+    pure $ msg { messageId = Just (fromIntegral lastId) }
+  case result of
+    Left (e :: SomeException) -> pure $ Left $ DatabaseError $ T.pack $ show e
+    Right msgWithId -> pure $ Right msgWithId
+
+-- | Get a message by ID
+getMessage :: Connection -> Int -> IO (Either TapirError (Maybe Message))
+getMessage conn mid = do
+  result <- try $ query conn
+    "SELECT id, session_id, role, content, mode, timestamp, model, provider, tokens_used, error \
+    \FROM messages WHERE id = ?"
+    (Only mid)
+    :: IO (Either SomeException [(Int, Text, Role, Text, Mode, Text, Maybe Text, Maybe Text, Maybe Int, Maybe Text)])
+  case result of
+    Left e -> pure $ Left $ DatabaseError $ T.pack $ show e
+    Right [] -> pure $ Right Nothing
+    Right ((mid', sid, role, content, mode, ts, model, provider, tokens, err):_) ->
+      case textToUtc ts of
+        Just timestamp -> pure $ Right $ Just Message
+          { messageId = Just mid'
+          , messageSessionId = sid
+          , messageRole = role
+          , messageContent = content
+          , messageMode = mode
+          , messageTimestamp = timestamp
+          , messageModel = model
+          , messageProvider = provider
+          , messageTokensUsed = tokens
+          , messageError = err
+          }
+        Nothing -> pure $ Left $ DatabaseError "Invalid timestamp in message"
+
+-- | Get all messages for a session (ordered by timestamp)
+getSessionMessages :: Connection -> Text -> IO (Either TapirError [Message])
+getSessionMessages conn sid = do
+  result <- try $ query conn
+    "SELECT id, session_id, role, content, mode, timestamp, model, provider, tokens_used, error \
+    \FROM messages WHERE session_id = ? ORDER BY timestamp ASC"
+    (Only sid)
+    :: IO (Either SomeException [(Int, Text, Role, Text, Mode, Text, Maybe Text, Maybe Text, Maybe Int, Maybe Text)])
+  case result of
+    Left e -> pure $ Left $ DatabaseError $ T.pack $ show e
+    Right rows -> pure $ Right $ rowsToMessages rows
+
+-- | Get message history (paginated, most recent first)
+getMessageHistory :: Connection -> Text -> Int -> Int -> IO (Either TapirError [Message])
+getMessageHistory conn sid limit offset = do
+  result <- try $ query conn
+    "SELECT id, session_id, role, content, mode, timestamp, model, provider, tokens_used, error \
+    \FROM messages WHERE session_id = ? ORDER BY timestamp DESC LIMIT ? OFFSET ?"
+    (sid, limit, offset)
+    :: IO (Either SomeException [(Int, Text, Role, Text, Mode, Text, Maybe Text, Maybe Text, Maybe Int, Maybe Text)])
+  case result of
+    Left e -> pure $ Left $ DatabaseError $ T.pack $ show e
+    Right rows -> pure $ Right $ reverse $ rowsToMessages rows
+
+-- | Delete a message
+deleteMessage :: Connection -> Int -> IO (Either TapirError ())
+deleteMessage conn mid = do
+  result <- try $ execute conn
+    "DELETE FROM messages WHERE id = ?"
+    (Only mid)
+  case result of
+    Left (e :: SomeException) -> pure $ Left $ DatabaseError $ T.pack $ show e
+    Right () -> pure $ Right ()
+
+-- | Helper: Convert rows to Message list
+rowsToMessages :: [(Int, Text, Role, Text, Mode, Text, Maybe Text, Maybe Text, Maybe Int, Maybe Text)] -> [Message]
+rowsToMessages = foldr go []
+  where
+    go (mid, sid, role, content, mode, ts, model, provider, tokens, err) acc =
+      case textToUtc ts of
+        Just timestamp -> Message
+          { messageId = Just mid
+          , messageSessionId = sid
+          , messageRole = role
+          , messageContent = content
+          , messageMode = mode
+          , messageTimestamp = timestamp
+          , messageModel = model
+          , messageProvider = provider
+          , messageTokensUsed = tokens
+          , messageError = err
+          } : acc
+        Nothing -> acc
+
+-- ════════════════════════════════════════════════════════════════
+-- CARD OPERATIONS
+-- ════════════════════════════════════════════════════════════════
+
+-- | Save a new card (returns card with generated ID)
+saveCard :: Connection -> AnkiCard -> IO (Either TapirError AnkiCard)
+saveCard conn card = do
+  result <- try $ do
+    execute conn
+      "INSERT INTO cards (session_id, language_id, front, back, tags, deck, source_msg_id, anki_note_id, pushed_at, created_at) \
+      \VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      ( cardSessionId card
+      , cardLanguageId card
+      , cardFront card
+      , cardBack card
+      , tagsToText $ cardTags card
+      , cardDeck card
+      , cardSourceMsgId card
+      , cardAnkiNoteId card
+      , utcToText <$> cardPushedAt card
+      , utcToText $ cardCreatedAt card
+      )
+    lastId <- lastInsertRowId conn
+    pure $ card { cardId = Just (fromIntegral lastId) }
+  case result of
+    Left (e :: SomeException) -> pure $ Left $ DatabaseError $ T.pack $ show e
+    Right cardWithId -> pure $ Right cardWithId
+
+-- | CardRow type for database queries (splits 11 columns into two parts)
+-- Part 1: (id, session_id, language_id, front, back)
+-- Part 2: (tags, deck, source_msg_id, anki_note_id, pushed_at, created_at)
+type CardRowPart1 = (Int, Text, Text, Text, Text)
+type CardRowPart2 = (Text, Text, Maybe Int, Maybe Integer, Maybe Text, Text)
+
+-- | Get a card by ID
+getCard :: Connection -> Int -> IO (Either TapirError (Maybe AnkiCard))
+getCard conn cid = do
+  result <- try $ query conn
+    "SELECT id, session_id, language_id, front, back, tags, deck, source_msg_id, anki_note_id, pushed_at, created_at \
+    \FROM cards WHERE id = ?"
+    (Only cid)
+    :: IO (Either SomeException [(CardRowPart1 :. CardRowPart2)])
+  case result of
+    Left e -> pure $ Left $ DatabaseError $ T.pack $ show e
+    Right [] -> pure $ Right Nothing
+    Right (((cid', sid, langId, front, back) :. (tagsJson, deck, srcMsgId, noteId, pushedAt, createdAt)):_) ->
+      case textToUtc createdAt of
+        Just ca -> pure $ Right $ Just AnkiCard
+          { cardId = Just cid'
+          , cardSessionId = sid
+          , cardLanguageId = langId
+          , cardFront = front
+          , cardBack = back
+          , cardTags = textToTags tagsJson
+          , cardDeck = deck
+          , cardSourceMsgId = srcMsgId
+          , cardAnkiNoteId = noteId
+          , cardPushedAt = pushedAt >>= textToUtc
+          , cardCreatedAt = ca
+          }
+        Nothing -> pure $ Left $ DatabaseError "Invalid timestamp in card"
+
+-- | Get all cards for a session
+getSessionCards :: Connection -> Text -> IO (Either TapirError [AnkiCard])
+getSessionCards conn sid = do
+  result <- try $ query conn
+    "SELECT id, session_id, language_id, front, back, tags, deck, source_msg_id, anki_note_id, pushed_at, created_at \
+    \FROM cards WHERE session_id = ? ORDER BY created_at DESC"
+    (Only sid)
+    :: IO (Either SomeException [(CardRowPart1 :. CardRowPart2)])
+  case result of
+    Left e -> pure $ Left $ DatabaseError $ T.pack $ show e
+    Right rows -> pure $ Right $ rowsToCards rows
+
+-- | Get unpushed cards (not yet sent to Anki)
+getUnpushedCards :: Connection -> IO (Either TapirError [AnkiCard])
+getUnpushedCards conn = do
+  result <- try $ query_ conn
+    "SELECT id, session_id, language_id, front, back, tags, deck, source_msg_id, anki_note_id, pushed_at, created_at \
+    \FROM cards WHERE pushed_at IS NULL ORDER BY created_at ASC"
+    :: IO (Either SomeException [(CardRowPart1 :. CardRowPart2)])
+  case result of
+    Left e -> pure $ Left $ DatabaseError $ T.pack $ show e
+    Right rows -> pure $ Right $ rowsToCards rows
+
+-- | Mark a card as pushed to Anki
+markCardPushed :: Connection -> Int -> Integer -> IO (Either TapirError ())
+markCardPushed conn cid ankiNoteId = do
+  now <- getCurrentTime
+  result <- try $ execute conn
+    "UPDATE cards SET anki_note_id = ?, pushed_at = ? WHERE id = ?"
+    (ankiNoteId, utcToText now, cid)
+  case result of
+    Left (e :: SomeException) -> pure $ Left $ DatabaseError $ T.pack $ show e
+    Right () -> pure $ Right ()
+
+-- | Delete a card
+deleteCard :: Connection -> Int -> IO (Either TapirError ())
+deleteCard conn cid = do
+  result <- try $ execute conn
+    "DELETE FROM cards WHERE id = ?"
+    (Only cid)
+  case result of
+    Left (e :: SomeException) -> pure $ Left $ DatabaseError $ T.pack $ show e
+    Right () -> pure $ Right ()
+
+-- | Helper: Convert rows to AnkiCard list
+rowsToCards :: [(CardRowPart1 :. CardRowPart2)] -> [AnkiCard]
+rowsToCards = foldr go []
+  where
+    go ((cid, sid, langId, front, back) :. (tagsJson, deck, srcMsgId, noteId, pushedAt, createdAt)) acc =
+      case textToUtc createdAt of
+        Just ca -> AnkiCard
+          { cardId = Just cid
+          , cardSessionId = sid
+          , cardLanguageId = langId
+          , cardFront = front
+          , cardBack = back
+          , cardTags = textToTags tagsJson
+          , cardDeck = deck
+          , cardSourceMsgId = srcMsgId
+          , cardAnkiNoteId = noteId
+          , cardPushedAt = pushedAt >>= textToUtc
+          , cardCreatedAt = ca
+          } : acc
+        Nothing -> acc
+
+-- ════════════════════════════════════════════════════════════════
+-- UTILITY
+-- ════════════════════════════════════════════════════════════════
+
+-- | Run operations in a transaction
+withTransaction :: Connection -> IO a -> IO (Either TapirError a)
+withTransaction conn action = do
+  result <- try $ do
+    execute_ conn "BEGIN TRANSACTION;"
+    r <- action
+    execute_ conn "COMMIT;"
+    pure r
+  case result of
+    Left (e :: SomeException) -> do
+      _ <- try @SomeException $ execute_ conn "ROLLBACK;"
+      pure $ Left $ DatabaseError $ T.pack $ show e
+    Right a -> pure $ Right a

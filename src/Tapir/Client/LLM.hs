@@ -1,0 +1,108 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
+
+-- |
+-- Module      : Tapir.Client.LLM
+-- Description : Abstract LLM client interface
+-- Copyright   : (c) 2026 Dani Cusanelli
+-- License     : MIT
+--
+-- This module provides a provider-agnostic interface for LLM interactions.
+-- It supports both streaming and non-streaming completions.
+
+module Tapir.Client.LLM
+  ( -- * Client Interface
+    LLMClient(..)
+  , mkLLMClient
+
+    -- * Streaming
+  , StreamCallback
+  , StreamResult(..)
+
+    -- * Re-exports
+  , module Tapir.Client.LLM.Types
+  ) where
+
+import Control.Concurrent.STM (TVar)
+import Data.Text (Text)
+
+import Tapir.Types (TapirError(..), ProviderType(..))
+import Tapir.Types.Provider (ProviderConfig(..))
+import Tapir.Client.LLM.Types
+import qualified Tapir.Client.LLM.OpenRouter as OpenRouter
+
+-- ════════════════════════════════════════════════════════════════
+-- CLIENT INTERFACE
+-- ════════════════════════════════════════════════════════════════
+
+-- | Callback for streaming tokens
+-- The callback receives each token as it arrives
+type StreamCallback = Text -> IO ()
+
+-- | Result of a streaming completion
+data StreamResult = StreamResult
+  { srFullResponse :: !Text        -- ^ Complete concatenated response
+  , srModel        :: !Text        -- ^ Model that generated the response
+  , srTokensUsed   :: !(Maybe Int) -- ^ Token count if available
+  } deriving (Eq, Show)
+
+-- | Abstract LLM client interface
+data LLMClient = LLMClient
+  { -- | Provider name for display/logging
+    llmProviderName :: !Text
+
+    -- | Send a non-streaming completion request
+  , llmComplete :: ChatRequest -> IO (Either TapirError ChatResponse)
+
+    -- | Send a streaming completion request
+    -- The callback is invoked for each token received
+    -- Returns the full response when complete
+  , llmStreamComplete :: ChatRequest
+                      -> StreamCallback
+                      -> Maybe (TVar Bool)  -- ^ Optional cancel flag
+                      -> IO (Either TapirError StreamResult)
+
+    -- | Check if the client is properly configured (has API key, etc.)
+  , llmIsConfigured :: IO Bool
+  }
+
+-- ════════════════════════════════════════════════════════════════
+-- CLIENT CONSTRUCTION
+-- ════════════════════════════════════════════════════════════════
+
+-- | Create an LLM client based on provider configuration
+mkLLMClient :: ProviderConfig -> IO LLMClient
+mkLLMClient cfg = case providerType cfg of
+  OpenRouter -> mkOpenRouterClient cfg
+  Anthropic  -> pure $ notImplementedClient "Anthropic"
+  OpenAI     -> pure $ notImplementedClient "OpenAI"
+  Ollama     -> pure $ notImplementedClient "Ollama"
+
+-- | Create OpenRouter client wrapper
+mkOpenRouterClient :: ProviderConfig -> IO LLMClient
+mkOpenRouterClient cfg = do
+  client <- OpenRouter.mkClient cfg
+  pure LLMClient
+    { llmProviderName = "OpenRouter"
+    , llmComplete = OpenRouter.sendRequest client
+    , llmStreamComplete = \req cb cancel ->
+        convertStreamResult <$> OpenRouter.streamRequest client req cb cancel
+    , llmIsConfigured = OpenRouter.checkConfigured cfg
+    }
+  where
+    -- Convert OpenRouter.StreamResult to our StreamResult
+    convertStreamResult :: Either TapirError OpenRouter.StreamResult -> Either TapirError StreamResult
+    convertStreamResult = fmap $ \r -> StreamResult
+      { srFullResponse = OpenRouter.srFullResponse r
+      , srModel = OpenRouter.srModel r
+      , srTokensUsed = OpenRouter.srTokensUsed r
+      }
+
+-- | Placeholder client for unimplemented providers
+notImplementedClient :: Text -> LLMClient
+notImplementedClient name = LLMClient
+  { llmProviderName = name
+  , llmComplete = \_ -> pure $ Left $ InternalError $ name <> " provider not yet implemented"
+  , llmStreamComplete = \_ _ _ -> pure $ Left $ InternalError $ name <> " provider not yet implemented"
+  , llmIsConfigured = pure False
+  }
