@@ -11,7 +11,9 @@
       "Bash(cabal test:*)",
       "Bash(cabal repl:*)",
       "Bash(cabal list-bin:*)",
-      "Bash(cabal exec:*)"
+      "Bash(cabal exec:*)",
+      "Bash(grep:*)",
+      "Bash(wc:*)"
     ]
   }
 }
