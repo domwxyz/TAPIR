@@ -131,7 +131,7 @@ renderCommandMenuModal selectedIdx =
   withBorderStyle unicodeRounded $
   borderWithLabel (withAttr attrModalTitle $ txt " Commands ") $
   padAll 1 $
-  hLimit 50 $
+  hLimit 40 $
   vBox
     [ vBox $ zipWith (renderCommandRow selectedIdx) [0..] commands
     , txt " "
@@ -152,9 +152,8 @@ renderCommandRow selectedIdx idx Command{..} =
   in withAttr attr $
      hBox
        [ txt prefix
-       , hLimit 18 $ txt cmdName
-       , hLimit 12 $ withAttr attrHelpKey $ txt cmdKeybind
-       , txt cmdDesc
+       , txt cmdName
+       , padLeft Max $ withAttr attrHelpKey $ txt cmdKeybind
        ]
 
 -- ════════════════════════════════════════════════════════════════
