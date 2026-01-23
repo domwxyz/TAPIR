@@ -16,6 +16,7 @@ module Tapir.UI.Modals
 
     -- * Individual Modals
   , renderHelpModal
+  , renderCommandMenuModal
   , renderSettingsModal
   , renderCardPreviewModal
   , renderSessionsModal
@@ -46,6 +47,7 @@ renderModal :: AppState -> Widget Name
 renderModal st = case _asModal st of
   NoModal              -> emptyWidget
   HelpModal            -> renderHelpModal
+  CommandMenuModal idx -> renderCommandMenuModal idx
   SettingsModal        -> renderSettingsModal st
   PromptPreviewModal prompt -> renderPromptPreviewModal prompt
   CardPreviewModal card -> renderCardPreviewModal card
@@ -79,12 +81,10 @@ renderHelpModal =
     , renderKeybind "Ctrl+S"    "Session list"
     , renderKeybind "Ctrl+A"    "Show pending card"
     , txt " "
-    , withAttr attrHelpSection $ txt "SETTINGS"
-    , renderKeybind "Ctrl+,"    "Open settings"
-    , renderKeybind "Ctrl+R"    "Reload language"
-    , txt " "
     , withAttr attrHelpSection $ txt "APPLICATION"
-    , renderKeybind "F1 / ?"    "This help"
+    , renderKeybind "Ctrl+P"    "Command menu"
+    , renderKeybind "F1"        "This help"
+    , renderKeybind "F2"        "Settings"
     , renderKeybind "Esc"       "Close modal"
     , renderKeybind "Ctrl+C"    "Cancel / Quit"
     , renderKeybind "Ctrl+Q"    "Quit"
@@ -100,6 +100,62 @@ renderKeybind key desc =
     [ hLimit 14 $ withAttr attrHelpKey $ txt $ "  " <> key
     , withAttr attrHelpDescription $ txt $ " " <> desc
     ]
+
+-- ════════════════════════════════════════════════════════════════
+-- COMMAND MENU MODAL
+-- ════════════════════════════════════════════════════════════════
+
+-- | Command definition with name, keybind, and description
+data Command = Command
+  { cmdName    :: !Text
+  , cmdKeybind :: !Text
+  , cmdDesc    :: !Text
+  }
+
+-- | All available commands in the menu
+commands :: [Command]
+commands =
+  [ Command "New Session"    "Ctrl+N" "Start a fresh conversation"
+  , Command "Session List"   "Ctrl+S" "Browse and switch sessions"
+  , Command "Settings"       "F2"     "Open settings panel"
+  , Command "Show Card"      "Ctrl+A" "View pending Anki card"
+  , Command "Help"           "F1"     "Show all keybindings"
+  , Command "Quit"           "Ctrl+Q" "Exit TAPIR"
+  ]
+
+-- | Render command menu modal
+renderCommandMenuModal :: Int -> Widget Name
+renderCommandMenuModal selectedIdx =
+  centerLayer $
+  withAttr attrModalBorder $
+  withBorderStyle unicodeRounded $
+  borderWithLabel (withAttr attrModalTitle $ txt " Commands ") $
+  padAll 1 $
+  hLimit 50 $
+  vBox
+    [ vBox $ zipWith (renderCommandRow selectedIdx) [0..] commands
+    , txt " "
+    , hBorder
+    , padTop (Pad 1) $ hCenter $ keyHintRow
+        [ ("Enter", "Execute")
+        , ("j/k", "Navigate")
+        , ("Esc", "Close")
+        ]
+    ]
+
+-- | Render a single command row
+renderCommandRow :: Int -> Int -> Command -> Widget Name
+renderCommandRow selectedIdx idx Command{..} =
+  let isSelected = selectedIdx == idx
+      attr = if isSelected then attrStatusModeActive else attrModalDescription
+      prefix = if isSelected then "> " else "  "
+  in withAttr attr $
+     hBox
+       [ txt prefix
+       , hLimit 18 $ txt cmdName
+       , hLimit 12 $ withAttr attrHelpKey $ txt cmdKeybind
+       , txt cmdDesc
+       ]
 
 -- ════════════════════════════════════════════════════════════════
 -- SETTINGS MODAL

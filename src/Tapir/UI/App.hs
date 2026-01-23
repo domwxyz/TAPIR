@@ -54,13 +54,13 @@ import Graphics.Vty.Input.Events
 import Lens.Micro.Mtl ((.=), (%=), use)
 
 import Tapir.Types
-import Tapir.Config.Types (AppConfig(..))
+import Tapir.Config.Types (AppConfig(..), UIConfig(..))
 import Tapir.Config.Loader (getSystemPrompt, loadLanguageModule)
 import Tapir.Client.LLM
 import Tapir.Client.Anki (mkAnkiClient, checkConnection, addNote, AnkiNote(..), defaultNoteOptions)
 import Tapir.Db.Repository (createSession, saveMessage, saveCard, getRecentSessions, getSessionMessages, updateSessionTimestamp, markCardPushed, deleteSession)
 import Tapir.UI.Types
-import Tapir.UI.Attrs (tapirAttrMap, attrBorder)
+import Tapir.UI.Attrs (getAttrMap, attrBorder)
 import Tapir.UI.Chat (renderChat)
 import Tapir.UI.Input (renderInput, getEditorContent, mkInputEditor)
 import Tapir.UI.StatusBar (renderStatusBar)
@@ -77,7 +77,7 @@ tapirApp = App
   , appChooseCursor = showFirstCursor
   , appHandleEvent  = handleEvent
   , appStartEvent   = pure ()
-  , appAttrMap      = const tapirAttrMap
+  , appAttrMap      = \st -> let uiConf = configUI (_asConfig st) in getAttrMap (uiTheme uiConf)
   }
 
 -- | Run the TAPIR application
@@ -322,18 +322,14 @@ handleMainEvent ev = case ev of
       Streaming  -> asRequestState .= Idle
       _          -> asModal .= ConfirmQuitModal
 
-  -- Help
-  EvKey (KFun 1) [] -> asModal .= HelpModal
-  EvKey (KChar '?') [] -> do
-    st <- get
-    if _asFocus st == FocusHistory
-      then asModal .= HelpModal
-      else zoom asInputEditor $ handleEditorEvent (VtyEvent ev)
+  -- Command menu (Ctrl+P)
+  EvKey (KChar 'p') [MCtrl] -> asModal .= CommandMenuModal 0
 
-  -- Settings (Ctrl+, or F2)
-  EvKey (KChar ',') [MCtrl] -> asModal .= SettingsModal
-  EvKey (KChar ',') [MCtrl, MMeta] -> asModal .= SettingsModal  -- Some terminals add Meta
-  EvKey (KFun 2) []         -> asModal .= SettingsModal
+  -- Help (F1)
+  EvKey (KFun 1) [] -> asModal .= HelpModal
+
+  -- Settings (F2)
+  EvKey (KFun 2) [] -> asModal .= SettingsModal
 
   -- Mode switching
   EvKey (KChar '\t') [] -> cycleMode 1
@@ -465,6 +461,17 @@ handleModalEvent ev = do
     HelpModal -> case ev of
       EvKey _ _ -> asModal .= NoModal
       _         -> pure ()
+
+    CommandMenuModal idx -> case ev of
+      EvKey KEsc []        -> asModal .= NoModal
+      EvKey (KChar 'j') [] -> asModal .= CommandMenuModal (min (idx + 1) 5)
+      EvKey KDown []       -> asModal .= CommandMenuModal (min (idx + 1) 5)
+      EvKey (KChar 'k') [] -> asModal .= CommandMenuModal (max (idx - 1) 0)
+      EvKey KUp []         -> asModal .= CommandMenuModal (max (idx - 1) 0)
+      EvKey KEnter []      -> do
+        asModal .= NoModal
+        executeCommand idx
+      _                    -> pure ()
 
     ConfirmQuitModal -> case ev of
       EvKey (KChar 'y') [] -> halt
@@ -663,6 +670,62 @@ cycleMode delta = do
         go i (y:ys)
           | x == y    = Just i
           | otherwise = go (i + 1) ys
+
+-- | Execute a command from the command menu by index
+-- Commands: 0=New Session, 1=Session List, 2=Settings, 3=Show Card, 4=Help, 5=Quit
+executeCommand :: Int -> EventM Name AppState ()
+executeCommand cmdIdx = case cmdIdx of
+  0 -> do  -- New Session
+    st <- get
+    let langMod = _asLangModule st
+        conn = _asDbConnection st
+    newSid <- liftIO $ UUID.toText <$> nextRandom
+    now <- liftIO getCurrentTime
+    let newSession = Session
+          { sessionId          = newSid
+          , sessionLanguageId  = languageId (languageInfo langMod)
+          , sessionMode        = _asCurrentMode st
+          , sessionLearnerLevel = learnerLevel langMod
+          , sessionCreatedAt   = now
+          , sessionUpdatedAt   = now
+          , sessionTitle       = Nothing
+          , sessionActive      = True
+          }
+    _ <- liftIO $ createSession conn newSession
+    asSession .= newSession
+    asMessages .= []
+    asInputEditor .= mkInputEditor
+
+  1 -> do  -- Session List
+    st <- get
+    let conn = _asDbConnection st
+        chan = _asEventChannel st
+    liftIO $ void $ forkIO $ do
+      result <- getRecentSessions conn 50
+      case result of
+        Right sessionsWithCount -> do
+          let summaries = map sessionToSummary sessionsWithCount
+          writeBChan chan (EvSessionsLoaded summaries)
+        Left _ ->
+          writeBChan chan (EvSessionsLoaded [])
+    asModal .= SessionsModal [] 0
+
+  2 -> do  -- Settings
+    asModal .= SettingsModal
+
+  3 -> do  -- Show Card
+    st <- get
+    case _asPendingCard st of
+      Just card -> asModal .= CardPreviewModal card
+      Nothing   -> pure ()
+
+  4 -> do  -- Help
+    asModal .= HelpModal
+
+  5 -> do  -- Quit
+    asModal .= ConfirmQuitModal
+
+  _ -> pure ()  -- Unknown command, do nothing
 
 -- ════════════════════════════════════════════════════════════════
 -- LLM INTERACTION

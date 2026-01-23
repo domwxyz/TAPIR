@@ -167,7 +167,7 @@ renderEmptyChat =
     [ withAttr attrSystemMessage $ txt "Start a conversation!"
     , txt " "
     , withAttr attrTimestamp $ txt "Type a message and press Enter to send."
-    , withAttr attrTimestamp $ txt "Use Tab to switch modes, F1 for help."
+    , withAttr attrTimestamp $ txt "Use Tab to switch modes, Ctrl+P for commands."
     ]
 
 -- ════════════════════════════════════════════════════════════════

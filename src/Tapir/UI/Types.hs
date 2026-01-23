@@ -107,6 +107,7 @@ data Focus
 data Modal
   = NoModal                          -- ^ No modal visible
   | HelpModal                        -- ^ Help/keybindings overlay
+  | CommandMenuModal !Int            -- ^ Command palette with selected index
   | SessionsModal ![SessionSummary] !Int  -- ^ Session list with current index
   | CardPreviewModal !AnkiCard       -- ^ Card preview/edit before push
   | SettingsModal                    -- ^ Settings dialog

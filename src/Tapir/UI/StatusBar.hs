@@ -90,7 +90,7 @@ renderErrorOrHints :: AppState -> Widget Name
 renderErrorOrHints st =
   case _asLastError st of
     Just err -> withAttr attrStatusError $ txt $ shortError err
-    Nothing  -> withAttr attrStatusHint $ txt "tab modes  ?help"
+    Nothing  -> withAttr attrStatusHint $ txt "tab modes  ctrl+p menu"
 
 -- ════════════════════════════════════════════════════════════════
 -- LEGACY EXPORTS (for compatibility)

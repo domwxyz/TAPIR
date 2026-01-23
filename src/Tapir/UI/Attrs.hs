@@ -14,6 +14,8 @@ module Tapir.UI.Attrs
   ( -- * Attribute Map
     tapirAttrMap
   , defaultAttrMap
+  , lightAttrMap
+  , getAttrMap
 
     -- * Attribute Names
     -- ** General
@@ -72,6 +74,7 @@ module Tapir.UI.Attrs
   ) where
 
 import Brick (AttrMap, AttrName, attrMap, attrName, on, fg)
+import Data.Text (Text)
 import Graphics.Vty.Attributes
 
 -- ════════════════════════════════════════════════════════════════
@@ -209,3 +212,72 @@ defaultAttrMap = attrMap defAttr
   , (attrHelpDescription, fg white)
   , (attrHelpSection,     withStyle (fg cyan) bold)
   ]
+
+-- ════════════════════════════════════════════════════════════════
+-- ATTRIBUTE MAP (Light Theme)
+-- ════════════════════════════════════════════════════════════════
+
+-- | Light theme attribute map
+lightAttrMap :: AttrMap
+lightAttrMap = attrMap defAttr
+  [ -- General
+    (attrBorder,       fg black)
+  , (attrBorderFocus,  fg blue)
+  , (attrTitle,        withStyle (fg black) bold)
+  , (attrTitleFocus,   withStyle (fg blue) bold)
+  , (attrError,        fg red)
+  , (attrSuccess,      fg green)
+  , (attrWarning,      fg yellow)
+
+    -- Chat
+  , (attrUserLabel,        withStyle (fg blue) bold)
+  , (attrUserMessage,      fg black)
+  , (attrAssistantLabel,   withStyle (fg green) bold)
+  , (attrAssistantMessage, fg black)
+  , (attrSystemMessage,    withStyle (fg brightBlack) italic)
+  , (attrTimestamp,        fg brightBlack)
+  , (attrStreaming,        withStyle (fg blue) blink)
+
+    -- Input
+  , (attrEditor,      black `on` white)
+  , (attrEditorFocus, black `on` rgbColor 240 240 240)
+  , (attrPlaceholder, fg brightBlack)
+
+    -- Status Bar (light theme)
+  , (attrStatusBar,        fg brightBlack)
+  , (attrStatusBarLeft,    fg brightBlack)
+  , (attrStatusBarRight,   fg brightBlack)
+  , (attrStatusMode,       fg brightBlack)
+  , (attrStatusModeActive, withStyle (fg blue) bold)
+  , (attrStatusLanguage,   fg magenta)
+  , (attrStatusLevel,      fg brightBlack)
+  , (attrStatusAnkiOn,     fg green)
+  , (attrStatusAnkiOff,    fg brightBlack)
+  , (attrStatusModel,      fg brightBlack)
+  , (attrStatusError,      fg red)
+  , (attrStatusHint,       fg brightBlack)
+
+    -- Modals
+  , (attrModalBorder,      fg blue)
+  , (attrModalTitle,       withStyle (fg blue) bold)
+  , (attrModalKey,         withStyle (fg brightBlack) bold)
+  , (attrModalDescription, fg black)
+
+    -- Card Preview
+  , (attrCardFront, withStyle (fg brightBlack) bold)
+  , (attrCardBack,  fg black)
+  , (attrCardTags,  fg blue)
+  , (attrCardDeck,  fg magenta)
+
+    -- Help
+  , (attrHelpKey,         withStyle (fg brightBlack) bold)
+  , (attrHelpDescription, fg black)
+  , (attrHelpSection,     withStyle (fg blue) bold)
+  ]
+
+-- | Get attr map by theme name ("default", "dark", or "light")
+getAttrMap :: Text -> AttrMap
+getAttrMap theme
+  | theme == "light" = lightAttrMap
+  | otherwise        = defaultAttrMap
+

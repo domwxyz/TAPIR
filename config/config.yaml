@@ -1,0 +1,61 @@
+# TAPIR Configuration File
+# Copy this file to ~/.config/tapir/config.yaml
+
+# Active language module (must match a file in ~/.config/tapir/languages/)
+active_language: spanish
+
+# LLM Provider Configuration
+provider:
+  # Provider type: openrouter, anthropic, openai, or ollama
+  type: openrouter
+
+  # API key: either set directly or use environment variable
+  # For environment variables, set the env var (e.g., export OPENROUTER_API_KEY="...")
+  # and leave api_key empty/commented out
+  api_key_env: OPENROUTER_API_KEY
+  # api_key: "sk-or-v1-..."  # Uncomment to set directly instead of using env var
+
+  # Model to use
+  model: "z-ai/glm-4.7"
+
+  # Generation parameters
+  temperature: 0.7
+  max_tokens: 2000
+  top_p: 1.0
+
+  # Stream responses (recommended for better UX)
+  stream: true
+
+  # Rate limiting
+  rate_limit:
+    requests_per_minute: 20
+    retry_after_seconds: 60
+
+  # Timeout settings (seconds)
+  timeout_seconds: 30
+  connect_timeout_seconds: 10
+
+# UI Configuration
+ui:
+  theme: default  # default | dark | light
+
+  chat:
+    show_timestamps: true
+    timestamp_format: "%H:%M"
+    max_history_lines: 1000
+    word_wrap: true
+
+# Database Configuration
+database:
+  path: "~/.local/share/tapir/tapir.db"
+  auto_backup: true
+  backup_dir: "~/.local/share/tapir/backups"
+  max_backups: 10
+
+# Logging Configuration
+logging:
+  enabled: true
+  level: info  # debug | info | warn | error
+  file: "~/.local/share/tapir/tapir.log"
+  max_size_mb: 10
+  rotate: true

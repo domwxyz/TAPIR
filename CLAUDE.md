@@ -126,10 +126,12 @@ cabal clean && cabal build
 | `Enter` | Send message |
 | `Tab` / `Shift+Tab` | Cycle modes |
 | `1-4` | Jump to mode |
+| `Ctrl+P` | Command menu |
 | `F1` | Help modal |
 | `F2` | Settings modal |
 | `Ctrl+N` | New session |
 | `Ctrl+S` | Sessions list |
+| `Ctrl+A` | Show pending card |
 | `Ctrl+Q` | Quit (with confirmation) |
 | `PageUp/Down` | Scroll history |
 | `Esc` | Close modal |

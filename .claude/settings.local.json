@@ -10,7 +10,8 @@
       "Bash(cabal install:*)",
       "Bash(cabal test:*)",
       "Bash(cabal repl:*)",
-      "Bash(cabal list-bin:*)"
+      "Bash(cabal list-bin:*)",
+      "Bash(cabal exec:*)"
     ]
   }
 }
