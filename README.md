@@ -4,15 +4,16 @@
 
 ## Status
 
-**Phase 5 Complete: Integration** (January 22, 2026)
+**Complete** (Phase 6/6) - January 22, 2026
 
-- Core TUI implemented and functional
-- LLM streaming working with OpenRouter
-- Database persistence operational
-- Session management fully functional
+All planned features implemented and functional:
+- Core TUI with four learning modes
+- LLM streaming with OpenRouter
+- SQLite database persistence
+- Full session management
 - Settings modal with level cycling and prompt preview
 - Card generation with robust JSON parsing
-- Anki integration complete
+- Anki integration via AnkiConnect
 
 ## What is TAPIR?
 
@@ -32,6 +33,7 @@ A keyboard-driven TUI (Terminal User Interface) for language learning with:
 - **Privacy-focused**: Works with OpenRouter, Anthropic, OpenAI, or local Ollama
 - **Full session management**: Create, list, load, delete sessions with message history
 - **Mode-specific prompts**: Each mode uses its own tailored system prompt
+- **Adjustable difficulty**: Change CEFR level (A1-C2) from settings
 
 ## Requirements
 
@@ -39,6 +41,7 @@ A keyboard-driven TUI (Terminal User Interface) for language learning with:
 - **Cabal** 3.10+
 - **OpenRouter API key** (or other LLM provider)
 - **Windows**: Requires Windows Terminal, PowerShell, or Command Prompt (not Git Bash/mintty)
+- **Anki** (optional): For flashcard integration, requires [AnkiConnect](https://ankiweb.net/shared/info/2055492159) plugin
 
 ## Quick Start
 
@@ -64,7 +67,7 @@ cabal run tapir
 
 1. Create the config directory:
    ```bash
-   mkdir -p ~/.config/tapir
+   mkdir -p ~/.config/tapir/languages
    ```
 
 2. Create `~/.config/tapir/config.yaml`:
@@ -86,43 +89,58 @@ cabal run tapir
 
    database:
      path: "~/.local/share/tapir/tapir.db"
+
+   anki:
+     enabled: true
+     host: "localhost"
+     port: 8765
    ```
 
-3. Ensure the Spanish language module exists at `~/.config/tapir/languages/spanish.yaml`
+3. Copy the Spanish language module:
+   ```bash
+   cp languages/spanish.yaml ~/.config/tapir/languages/
+   ```
+
+4. Set your API key (alternative to config file):
+   ```bash
+   export OPENROUTER_API_KEY="sk-or-v1-..."
+   ```
 
 ### Keyboard Shortcuts
 
 | Key | Action |
 |-----|--------|
-| **Navigation** |
+| **Navigation** | |
 | `Tab` / `Shift+Tab` | Switch modes |
 | `1` / `2` / `3` / `4` | Jump to mode (Chat/Correct/Translate/Card) |
 | `PageUp/Down` | Scroll history |
-| **Actions** |
+| **Actions** | |
 | `Enter` | Send message |
 | `?` | Open help (when chat history has focus) |
-| **Sessions** |
+| **Sessions** | |
 | `Ctrl+N` | New session |
 | `Ctrl+S` | Session list |
-| **Settings** |
+| `J` / `K` | Navigate session list |
+| `D` | Delete session (in list) |
+| `N` | New session (in list) |
+| **Settings** | |
 | `Ctrl+,` or `F2` | Open settings |
 | `+` / `-` | Cycle learner level (in settings) |
 | `E` | View system prompt for current mode (in settings) |
-| **Modals** |
+| **Cards** | |
+| `Ctrl+A` | Show pending card |
+| **Modals** | |
 | `Esc` | Close modal |
-| `J` / `K` | Navigate session list |
-| `D` | Delete session (in session list) |
-| `N` | Create new session (in session list) |
-| **Quit** |
+| **Quit** | |
 | `Ctrl+Q` | Quit (with confirmation) |
 | `Ctrl+C` | Cancel / Quit |
 
 ### Modes
 
-1. **Chat** - Free conversation practice
-2. **Correct** - Grammar correction with explanations
-3. **Translate** - Bidirectional translation
-4. **Card** - Generate Anki flashcards
+1. **Chat** - Free conversation practice in your target language
+2. **Correct** - Grammar correction with detailed explanations
+3. **Translate** - Bidirectional translation between languages
+4. **Card** - Generate Anki flashcards from vocabulary
 
 Each mode has a dedicated system prompt that instructs the LLM how to respond appropriately.
 
@@ -172,7 +190,7 @@ TAPIR/
 - [x] Modal dialogs (Help, Settings, Sessions)
 - [x] Keyboard navigation
 
-### Phase 5: Integration (Complete)
+### Phase 5: Integration
 - [x] Wire LLM client to event loop
 - [x] Async streaming via BChan
 - [x] Message persistence to database
@@ -180,23 +198,12 @@ TAPIR/
 - [x] System prompt injection per mode
 - [x] Text wrapping with dynamic width
 
-### Phase 6: Features & Polish (Complete)
+### Phase 6: Features & Polish
 - [x] Full settings modal functionality (level cycling, prompt preview)
 - [x] Card generation mode with robust JSON parsing
 - [x] Anki integration (connection check, note push)
 - [x] UI polish (compact layout, dark theme)
 - [x] Error display (error modal, status bar notifications)
-
-## Known Issues
-
-**None currently** - All reported issues have been resolved:
-- ✅ Text wrapping now works correctly with dynamic width calculation
-- ✅ Question mark (`?`) input works in text editor
-- ✅ Settings modal fully functional with level adjustment
-- ✅ Session management fully implemented (delete, new, load)
-- ✅ Card generation with robust JSON parsing and markdown fence handling
-
-**Note**: On some terminals, `Ctrl+,` may not work reliably for opening settings. Use `F2` as an alternative shortcut.
 
 ## Development
 
@@ -240,6 +247,28 @@ See `impl docs/` for complete technical specifications:
 - `TAPIR_impl_Addendum.md` - Build config, schemas, API specs
 - `TAPIR_impl_Checklist.md` - Implementation roadmap
 - `TAPIR_Scaffolding_Guide.md` - Project structure guide
+
+For AI agents working on this codebase, see:
+
+- `CLAUDE.md` - Development guide and current state
+- `AGENTS.md` - Comprehensive AI agent reference
+
+## Troubleshooting
+
+### "GetConsoleScreenBufferInfo: invalid argument"
+Running in Git Bash/mintty on Windows. Use Windows Terminal or PowerShell.
+
+### "API key not configured"
+Set `OPENROUTER_API_KEY` environment variable or add `api_key` to config.yaml.
+
+### "Language module not found"
+Ensure `~/.config/tapir/languages/spanish.yaml` exists and `active_language` matches.
+
+### "Anki not running" or card push fails
+Start Anki and ensure AnkiConnect plugin is installed (add-on code: 2055492159).
+
+### Ctrl+, doesn't open settings
+Some terminals don't support this shortcut. Use `F2` instead.
 
 ## License
 

@@ -110,11 +110,14 @@ textToUtc = iso8601ParseM . T.unpack
 tagsToText :: [Text] -> Text
 tagsToText tags = TE.decodeUtf8 $ BL.toStrict $ encode tags
 
+-- | Parse tags from JSON, returning empty list for invalid JSON
+-- Note: Returns empty list on parse failure since tags are non-critical metadata.
+-- The original JSON is preserved in the database so no data is lost.
 textToTags :: Text -> [Text]
 textToTags txt =
   case decode (BL.fromStrict $ TE.encodeUtf8 txt) of
     Just tags -> tags
-    Nothing   -> []
+    Nothing   -> []  -- Tags are non-critical; empty is safe fallback
 
 -- ════════════════════════════════════════════════════════════════
 -- SESSION OPERATIONS
@@ -233,7 +236,7 @@ listSessions conn = do
     :: IO (Either SomeException [(Text, Text, Mode, LearnerLevel, Text, Text, Maybe Text, Bool)])
   case result of
     Left e -> pure $ Left $ DatabaseError $ T.pack $ show e
-    Right rows -> pure $ Right $ rowsToSessions rows
+    Right rows -> pure $ rowsToSessions rows
 
 -- | List active sessions only
 listActiveSessions :: Connection -> IO (Either TapirError [Session])
@@ -244,7 +247,7 @@ listActiveSessions conn = do
     :: IO (Either SomeException [(Text, Text, Mode, LearnerLevel, Text, Text, Maybe Text, Bool)])
   case result of
     Left e -> pure $ Left $ DatabaseError $ T.pack $ show e
-    Right rows -> pure $ Right $ rowsToSessions rows
+    Right rows -> pure $ rowsToSessions rows
 
 -- | Get recent sessions with message count (using view)
 getRecentSessions :: Connection -> Int -> IO (Either TapirError [(Session, Int)])
@@ -256,15 +259,16 @@ getRecentSessions conn limit = do
     :: IO (Either SomeException [(Text, Text, Mode, LearnerLevel, Maybe Text, Text, Text, Int)])
   case result of
     Left e -> pure $ Left $ DatabaseError $ T.pack $ show e
-    Right rows -> pure $ Right $ rowsToSessionsWithCount rows
+    Right rows -> pure $ rowsToSessionsWithCount rows
 
 -- | Helper: Convert rows to Session list
-rowsToSessions :: [(Text, Text, Mode, LearnerLevel, Text, Text, Maybe Text, Bool)] -> [Session]
-rowsToSessions = foldr go []
+-- Returns Left on first invalid timestamp encountered
+rowsToSessions :: [(Text, Text, Mode, LearnerLevel, Text, Text, Maybe Text, Bool)] -> Either TapirError [Session]
+rowsToSessions = traverse go
   where
-    go (sid, langId, mode, level, createdAt, updatedAt, title, active) acc =
+    go (sid, langId, mode, level, createdAt, updatedAt, title, active) =
       case (textToUtc createdAt, textToUtc updatedAt) of
-        (Just ca, Just ua) -> Session
+        (Just ca, Just ua) -> Right Session
           { sessionId = sid
           , sessionLanguageId = langId
           , sessionMode = mode
@@ -273,16 +277,20 @@ rowsToSessions = foldr go []
           , sessionUpdatedAt = ua
           , sessionTitle = title
           , sessionActive = active
-          } : acc
-        _ -> acc
+          }
+        (Nothing, _) -> Left $ DatabaseError $
+          "Invalid created_at timestamp for session " <> sid <> ": " <> createdAt
+        (_, Nothing) -> Left $ DatabaseError $
+          "Invalid updated_at timestamp for session " <> sid <> ": " <> updatedAt
 
 -- | Helper: Convert rows to Session with message count
-rowsToSessionsWithCount :: [(Text, Text, Mode, LearnerLevel, Maybe Text, Text, Text, Int)] -> [(Session, Int)]
-rowsToSessionsWithCount = foldr go []
+-- Returns Left on first invalid timestamp encountered
+rowsToSessionsWithCount :: [(Text, Text, Mode, LearnerLevel, Maybe Text, Text, Text, Int)] -> Either TapirError [(Session, Int)]
+rowsToSessionsWithCount = traverse go
   where
-    go (sid, langId, mode, level, title, createdAt, updatedAt, msgCount) acc =
+    go (sid, langId, mode, level, title, createdAt, updatedAt, msgCount) =
       case (textToUtc createdAt, textToUtc updatedAt) of
-        (Just ca, Just ua) ->
+        (Just ca, Just ua) -> Right
           ( Session
               { sessionId = sid
               , sessionLanguageId = langId
@@ -294,8 +302,11 @@ rowsToSessionsWithCount = foldr go []
               , sessionActive = True  -- from view, always active
               }
           , msgCount
-          ) : acc
-        _ -> acc
+          )
+        (Nothing, _) -> Left $ DatabaseError $
+          "Invalid created_at timestamp for session " <> sid <> ": " <> createdAt
+        (_, Nothing) -> Left $ DatabaseError $
+          "Invalid updated_at timestamp for session " <> sid <> ": " <> updatedAt
 
 -- ════════════════════════════════════════════════════════════════
 -- MESSAGE OPERATIONS
@@ -361,7 +372,7 @@ getSessionMessages conn sid = do
     :: IO (Either SomeException [(Int, Text, Role, Text, Mode, Text, Maybe Text, Maybe Text, Maybe Int, Maybe Text)])
   case result of
     Left e -> pure $ Left $ DatabaseError $ T.pack $ show e
-    Right rows -> pure $ Right $ rowsToMessages rows
+    Right rows -> pure $ rowsToMessages rows
 
 -- | Get message history (paginated, most recent first)
 getMessageHistory :: Connection -> Text -> Int -> Int -> IO (Either TapirError [Message])
@@ -373,7 +384,7 @@ getMessageHistory conn sid limit offset = do
     :: IO (Either SomeException [(Int, Text, Role, Text, Mode, Text, Maybe Text, Maybe Text, Maybe Int, Maybe Text)])
   case result of
     Left e -> pure $ Left $ DatabaseError $ T.pack $ show e
-    Right rows -> pure $ Right $ reverse $ rowsToMessages rows
+    Right rows -> fmap reverse <$> pure (rowsToMessages rows)
 
 -- | Delete a message
 deleteMessage :: Connection -> Int -> IO (Either TapirError ())
@@ -386,12 +397,13 @@ deleteMessage conn mid = do
     Right () -> pure $ Right ()
 
 -- | Helper: Convert rows to Message list
-rowsToMessages :: [(Int, Text, Role, Text, Mode, Text, Maybe Text, Maybe Text, Maybe Int, Maybe Text)] -> [Message]
-rowsToMessages = foldr go []
+-- Returns Left on first invalid timestamp encountered
+rowsToMessages :: [(Int, Text, Role, Text, Mode, Text, Maybe Text, Maybe Text, Maybe Int, Maybe Text)] -> Either TapirError [Message]
+rowsToMessages = traverse go
   where
-    go (mid, sid, role, content, mode, ts, model, provider, tokens, err) acc =
+    go (mid, sid, role, content, mode, ts, model, provider, tokens, err) =
       case textToUtc ts of
-        Just timestamp -> Message
+        Just timestamp -> Right Message
           { messageId = Just mid
           , messageSessionId = sid
           , messageRole = role
@@ -402,8 +414,9 @@ rowsToMessages = foldr go []
           , messageProvider = provider
           , messageTokensUsed = tokens
           , messageError = err
-          } : acc
-        Nothing -> acc
+          }
+        Nothing -> Left $ DatabaseError $
+          "Invalid timestamp for message " <> T.pack (show mid) <> ": " <> ts
 
 -- ════════════════════════════════════════════════════════════════
 -- CARD OPERATIONS
@@ -477,7 +490,7 @@ getSessionCards conn sid = do
     :: IO (Either SomeException [(CardRowPart1 :. CardRowPart2)])
   case result of
     Left e -> pure $ Left $ DatabaseError $ T.pack $ show e
-    Right rows -> pure $ Right $ rowsToCards rows
+    Right rows -> pure $ rowsToCards rows
 
 -- | Get unpushed cards (not yet sent to Anki)
 getUnpushedCards :: Connection -> IO (Either TapirError [AnkiCard])
@@ -488,7 +501,7 @@ getUnpushedCards conn = do
     :: IO (Either SomeException [(CardRowPart1 :. CardRowPart2)])
   case result of
     Left e -> pure $ Left $ DatabaseError $ T.pack $ show e
-    Right rows -> pure $ Right $ rowsToCards rows
+    Right rows -> pure $ rowsToCards rows
 
 -- | Mark a card as pushed to Anki
 markCardPushed :: Connection -> Int -> Integer -> IO (Either TapirError ())
@@ -512,12 +525,13 @@ deleteCard conn cid = do
     Right () -> pure $ Right ()
 
 -- | Helper: Convert rows to AnkiCard list
-rowsToCards :: [(CardRowPart1 :. CardRowPart2)] -> [AnkiCard]
-rowsToCards = foldr go []
+-- Returns Left on first invalid timestamp encountered
+rowsToCards :: [(CardRowPart1 :. CardRowPart2)] -> Either TapirError [AnkiCard]
+rowsToCards = traverse go
   where
-    go ((cid, sid, langId, front, back) :. (tagsJson, deck, srcMsgId, noteId, pushedAt, createdAt)) acc =
+    go ((cid, sid, langId, front, back) :. (tagsJson, deck, srcMsgId, noteId, pushedAt, createdAt)) =
       case textToUtc createdAt of
-        Just ca -> AnkiCard
+        Just ca -> Right AnkiCard
           { cardId = Just cid
           , cardSessionId = sid
           , cardLanguageId = langId
@@ -529,14 +543,16 @@ rowsToCards = foldr go []
           , cardAnkiNoteId = noteId
           , cardPushedAt = pushedAt >>= textToUtc
           , cardCreatedAt = ca
-          } : acc
-        Nothing -> acc
+          }
+        Nothing -> Left $ DatabaseError $
+          "Invalid created_at timestamp for card " <> T.pack (show cid) <> ": " <> createdAt
 
 -- ════════════════════════════════════════════════════════════════
 -- UTILITY
 -- ════════════════════════════════════════════════════════════════
 
 -- | Run operations in a transaction
+-- On failure, attempts rollback and reports both errors if rollback also fails
 withTransaction :: Connection -> IO a -> IO (Either TapirError a)
 withTransaction conn action = do
   result <- try $ do
@@ -546,6 +562,11 @@ withTransaction conn action = do
     pure r
   case result of
     Left (e :: SomeException) -> do
-      _ <- try @SomeException $ execute_ conn "ROLLBACK;"
-      pure $ Left $ DatabaseError $ T.pack $ show e
+      rollbackResult <- try @SomeException $ execute_ conn "ROLLBACK;"
+      let baseError = T.pack $ show e
+      let fullError = case rollbackResult of
+            Right () -> baseError
+            Left rollbackErr -> baseError <> " (rollback also failed: "
+                              <> T.pack (show rollbackErr) <> ")"
+      pure $ Left $ DatabaseError fullError
     Right a -> pure $ Right a

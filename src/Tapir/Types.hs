@@ -41,10 +41,7 @@ data Role = User | Assistant | System
   deriving (Eq, Show, Generic)
 
 instance ToJSON Role where
-  toJSON = \case
-    User      -> "user"
-    Assistant -> "assistant"
-    System    -> "system"
+  toJSON = String . roleToText
 
 instance FromJSON Role where
   parseJSON = withText "Role" $ \case
@@ -224,10 +221,23 @@ displayError = \case
 -- | Short error messages for status bar
 shortError :: TapirError -> Text
 shortError = \case
+  ConfigNotFound _     -> "Config not found"
+  ConfigParseError _ _ -> "Config parse error"
+  LanguageNotFound _   -> "Language not found"
+  InvalidLanguageConfig _ _ -> "Invalid language config"
   APIKeyMissing        -> "API key missing"
   APIError code _      -> "API error " <> T.pack (show code)
   NetworkError _       -> "Network error"
+  StreamingError _     -> "Streaming error"
+  ModelNotAvailable _  -> "Model not available"
   RateLimitExceeded _  -> "Rate limited"
-  AnkiNotRunning       -> "Anki not running"
   DatabaseError _      -> "Database error"
-  _                    -> "Error (see logs)"
+  SessionNotFound _    -> "Session not found"
+  MigrationError _ _   -> "Migration error"
+  AnkiNotRunning       -> "Anki not running"
+  AnkiConnectionError _ -> "Anki connection error"
+  DeckNotFound _       -> "Deck not found"
+  CardParseError _     -> "Card parse error"
+  PromptTemplateError _ -> "Prompt error"
+  MissingPromptVariable _ -> "Missing variable"
+  InternalError _      -> "Internal error"

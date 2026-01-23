@@ -6,6 +6,7 @@ module Tapir.Config.Types
   , UIConfig(..)
   , ChatUIConfig(..)
   , LoggingConfig(..)
+  , AnkiClientConfig(..)
   , AppConfig(..)
   ) where
 
@@ -85,6 +86,22 @@ instance FromJSON LoggingConfig where
 
 instance ToJSON LoggingConfig
 
+-- | Anki client configuration
+data AnkiClientConfig = AnkiClientConfig
+  { ankiHost :: !Text
+  , ankiPort :: !Int
+  , ankiTimeoutSeconds :: !Int
+  } deriving (Eq, Show, Generic)
+
+instance FromJSON AnkiClientConfig where
+  parseJSON = withObject "AnkiClientConfig" $ \v ->
+    AnkiClientConfig
+      <$> v .:? "host" .!= "localhost"
+      <*> v .:? "port" .!= 8765
+      <*> v .:? "timeout_seconds" .!= 5
+
+instance ToJSON AnkiClientConfig
+
 -- | Main application config
 data AppConfig = AppConfig
   { configActiveLanguage :: !Text
@@ -92,6 +109,7 @@ data AppConfig = AppConfig
   , configUI :: !UIConfig
   , configDatabase :: !DatabaseConfig
   , configLogging :: !LoggingConfig
+  , configAnki :: !AnkiClientConfig
   } deriving (Eq, Show, Generic)
 
 instance FromJSON AppConfig where
@@ -102,5 +120,6 @@ instance FromJSON AppConfig where
       <*> v .:? "ui" .!= UIConfig "default" (ChatUIConfig True "%H:%M" 1000 True)
       <*> v .:? "database" .!= DatabaseConfig "~/.local/share/tapir/tapir.db" True "~/.local/share/tapir/backups" 10
       <*> v .:? "logging" .!= LoggingConfig True "info" "~/.local/share/tapir/tapir.log" 10 True
+      <*> v .:? "anki" .!= AnkiClientConfig "localhost" 8765 5
 
 instance ToJSON AppConfig

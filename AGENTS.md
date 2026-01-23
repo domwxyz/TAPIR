@@ -2,8 +2,30 @@
 
 **Project:** TAPIR (Translation API Router)
 **Type:** Haskell + brick TUI for language learning
-**Status:** Phase 5/6 - Integration (In Progress)
+**Status:** Complete (Phase 6/6)
 **Last Updated:** January 22, 2026
+
+---
+
+## Quick Start for Agents
+
+### Build & Run
+```bash
+cabal build           # Build project
+cabal test            # Run tests
+cabal run tapir       # Run application
+```
+
+### Key File Locations
+| Concern | Location |
+|---------|----------|
+| Entry point | `app/Main.hs` |
+| Main app logic | `src/Tapir/UI/App.hs` |
+| State types | `src/Tapir/UI/Types.hs` |
+| Config loading | `src/Tapir/Config/Loader.hs` |
+| Database ops | `src/Tapir/Db/Repository.hs` |
+| LLM client | `src/Tapir/Client/LLM/OpenRouter.hs` |
+| Anki client | `src/Tapir/Client/Anki.hs` |
 
 ---
 
@@ -28,33 +50,27 @@ TAPIR is a **language-agnostic terminal-based language learning assistant** buil
 
 ---
 
-## Current Status
+## Implementation Status
 
-### What's Working ✅
+### Completed Features
 - Configuration system with YAML loading from `~/.config/tapir/`
 - Language modules (Spanish reference implementation)
 - SQLite database with full schema and repository pattern
 - LLM client with OpenRouter integration and streaming support
 - Complete brick TUI with all four modes (Chat, Correct, Translate, Card)
 - Streaming token display via BChan
-- Session management (create, list, load, update)
+- Session management (create, list, load, delete with message history)
 - Modal dialogs (Help, Settings, Sessions, Card Preview, Quit confirm)
 - Database persistence for messages, sessions, cards
 - Anki client with connection checking and note pushing
+- Settings modal with level cycling and prompt preview
+- Card generation with robust JSON parsing and markdown fence handling
+- Text wrapping with dynamic width calculation
+- System prompt injection per mode
 
-### Known Issues 🐛
-- **Text wrapping**: Long messages don't wrap in viewport (use `txt` not `txtWrap`)
+### Known Limitations
 - **Windows terminals**: Must use Windows Terminal/PowerShell (not Git Bash/mintty)
-- **Settings modal**: Placeholder only, edit config.yaml directly for settings
-- **Card generation**: Basic pattern matching, not robust JSON parsing
-
-### Remaining Work 📋
-- Phase 5: Complete session save/load functionality
-- Phase 5: Fix text wrapping in chat viewport
-- Phase 6: Implement settings modal functionality
-- Phase 6: Improve card generation with proper JSON parsing
-- Phase 6: UI theming options
-- Phase 6: Error display improvements
+- **Ctrl+, shortcut**: May not work on some terminals; use F2 as alternative
 
 ---
 
@@ -65,40 +81,53 @@ TAPIR/
 ├── app/
 │   └── Main.hs                 # Entry point, CLI parsing, initialization
 ├── src/Tapir/
-│   ├── Types.hs                 # Core types (Message, Session, AnkiCard, TapirError)
+│   ├── Types.hs                # Re-exports all domain types
 │   ├── Types/
-│   │   ├── Mode.hs              # Mode ADT (Conversation, Correction, etc.)
-│   │   ├── Language.hs          # LanguageInfo, LanguageModule, LearnerLevel
-│   │   └── Provider.hs          # ProviderType, ProviderConfig
+│   │   ├── Core.hs             # Mode, Role, TapirError ADTs
+│   │   ├── Language.hs         # LanguageInfo, LanguageModule, LearnerLevel
+│   │   ├── Provider.hs         # ProviderType, ProviderConfig
+│   │   ├── Message.hs          # Message type with all fields
+│   │   ├── Session.hs          # Session, SessionSummary
+│   │   └── Card.hs             # AnkiCard type
 │   ├── Config/
-│   │   ├── Types.hs             # AppConfig, UIConfig, DatabaseConfig
-│   │   ├── Loader.hs            # YAML loading, prompt interpolation
-│   │   └── Defaults.hs          # Default configurations
+│   │   ├── Types.hs            # AppConfig, UIConfig, DatabaseConfig
+│   │   ├── Loader.hs           # YAML loading, prompt interpolation
+│   │   └── Defaults.hs         # Default configurations
 │   ├── UI/
-│   │   ├── Types.hs             # AppState, Modal, RequestState, TapirEvent
-│   │   ├── App.hs               # Main brick app, event handling
-│   │   ├── Attrs.hs             # Color theme attributes
-│   │   ├── Widgets.hs           # Reusable widget helpers
-│   │   ├── Chat.hs              # Chat history viewport rendering
-│   │   ├── Input.hs             # Text editor widget
-│   │   ├── StatusBar.hs         # Mode tabs, status info
-│   │   └── Modals.hs            # Modal dialogs (Help, Settings, etc.)
+│   │   ├── Types.hs            # AppState, Modal, RequestState, TapirEvent
+│   │   ├── App.hs              # Main brick app, handleEvent, handleCustomEvent
+│   │   ├── Attrs.hs            # Color theme attributes
+│   │   ├── Widgets.hs          # Reusable widget helpers
+│   │   ├── Chat.hs             # Chat history viewport rendering
+│   │   ├── Input.hs            # Text editor widget
+│   │   ├── StatusBar.hs        # Mode tabs, status info
+│   │   └── Modals.hs           # All modal dialogs
 │   ├── Client/
-│   │   ├── LLM.hs               # Abstract LLM client interface
+│   │   ├── LLM.hs              # Abstract LLM client interface
 │   │   ├── LLM/
-│   │   │   ├── Types.hs         # ChatMessage, ChatRequest, StreamChunk
-│   │   │   └── OpenRouter.hs   # OpenRouter implementation
-│   │   └── Anki.hs              # AnkiConnect client
-│   └── Db/
-│       ├── Schema.hs             # Database initialization, migrations
-│       └── Repository.hs        # CRUD operations
+│   │   │   ├── Types.hs        # ChatMessage, ChatRequest, StreamChunk
+│   │   │   └── OpenRouter.hs   # OpenRouter implementation with SSE
+│   │   └── Anki.hs             # AnkiConnect client
+│   ├── Db/
+│   │   ├── Schema.hs           # Database initialization, migrations
+│   │   └── Repository.hs       # All CRUD operations
+│   └── Util/                   # Utility functions
 ├── test/                       # Test suite
-├── languages/                   # Template language modules (spanish.yaml)
-└── impl docs/                  # Local reference docs (not tracked in git)
-    ├── TAPIR_impl_Specification.md   # Full architecture spec
-    ├── TAPIR_impl_Addendum.md          # Build config, schemas, API details
-    ├── TAPIR_impl_Checklist.md         # Implementation roadmap
-    └── TAPIR_Scaffolding_Guide.md       # Project structure guide
+│   ├── Spec.hs                 # Main test entry
+│   └── Tapir/
+│       ├── Config/LoaderSpec.hs
+│       ├── Client/LLMSpec.hs
+│       └── Db/RepositorySpec.hs
+├── languages/                  # Template language modules
+│   └── spanish.yaml            # Reference implementation
+├── impl docs/                  # Implementation specifications
+│   ├── TAPIR_impl_Specification.md
+│   ├── TAPIR_impl_Addendum.md
+│   ├── TAPIR_impl_Checklist.md
+│   └── TAPIR_Scaffolding_Guide.md
+├── CLAUDE.md                   # Development guide (this context)
+├── AGENTS.md                   # AI agent guide (this file)
+└── README.md                   # User-facing documentation
 ```
 
 ---
@@ -110,8 +139,8 @@ TAPIR/
 ~/.config/tapir/
 ├── config.yaml              # Main configuration
 └── languages/
-    ├── spanish.yaml          # Spanish language module (active)
-    ├── french.yaml           # Additional languages
+    ├── spanish.yaml         # Spanish language module (reference)
+    ├── french.yaml          # Additional languages
     └── japanese.yaml        # User can add more
 ```
 
@@ -122,7 +151,7 @@ active_language: spanish
 
 provider:
   type: openrouter           # openrouter | anthropic | openai | ollama
-  api_key: "your-api-key"  # Or use ${OPENROUTER_API_KEY}
+  api_key: "your-api-key"    # Or use ${OPENROUTER_API_KEY}
   model: "z-ai/glm-4.7"
   temperature: 0.7
   max_tokens: 2000
@@ -157,7 +186,7 @@ language:
   native_language_code: en
   variant: latam              # latam | spain | neutral
 
-learner_level: A1              # A1 | A2 | B1 | B2 | C1 | C2
+learner_level: A1             # A1 | A2 | B1 | B2 | C1 | C2
 
 anki:
   default_deck: "Spanish::Vocab"
@@ -209,117 +238,46 @@ Available for interpolation in system prompts:
 #### `sessions`
 ```sql
 id TEXT PRIMARY KEY              -- UUID v4
-language_id TEXT NOT NULL       -- e.g., "spanish"
-mode TEXT NOT NULL            -- "conversation", "correction", etc.
-learner_level TEXT NOT NULL   -- "A1", "B2", etc.
+language_id TEXT NOT NULL        -- e.g., "spanish"
+mode TEXT NOT NULL               -- "conversation", "correction", etc.
+learner_level TEXT NOT NULL      -- "A1", "B2", etc.
 created_at TEXT NOT NULL
 updated_at TEXT NOT NULL
-title TEXT                    -- Optional user-set title
+title TEXT                       -- Optional user-set title
 active INTEGER NOT NULL DEFAULT 1  -- 0 = archived, 1 = active
 ```
 
 #### `messages`
 ```sql
 id INTEGER PRIMARY KEY AUTOINCREMENT
-session_id TEXT NOT NULL       -- FK to sessions.id
-role TEXT NOT NULL            -- "user" | "assistant"
+session_id TEXT NOT NULL         -- FK to sessions.id
+role TEXT NOT NULL               -- "user" | "assistant"
 content TEXT NOT NULL
 mode TEXT NOT NULL
 timestamp TEXT NOT NULL
-model TEXT                   -- Model used (e.g., "glm-4.7")
-provider TEXT                -- "OpenRouter", etc.
+model TEXT                       -- Model used (e.g., "glm-4.7")
+provider TEXT                    -- "OpenRouter", etc.
 tokens_used INTEGER
-error TEXT                   -- Error message if failed
+error TEXT                       -- Error message if failed
 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 ```
 
 #### `cards`
 ```sql
 id INTEGER PRIMARY KEY AUTOINCREMENT
-session_id TEXT NOT NULL       -- FK to sessions.id
+session_id TEXT NOT NULL         -- FK to sessions.id
 language_id TEXT NOT NULL
-front TEXT NOT NULL          -- Target language text
-back TEXT NOT NULL           -- Native language + context
-tags TEXT NOT NULL           -- JSON array
+front TEXT NOT NULL              -- Target language text
+back TEXT NOT NULL               -- Native language + context
+tags TEXT NOT NULL               -- JSON array
 deck TEXT NOT NULL
-source_msg_id INTEGER        -- FK to messages.id
-anki_note_id INTEGER        -- AnkiConnect note ID after push
-pushed_at TEXT             -- ISO 8601 timestamp
+source_msg_id INTEGER            -- FK to messages.id
+anki_note_id INTEGER             -- AnkiConnect note ID after push
+pushed_at TEXT                   -- ISO 8601 timestamp
 created_at TEXT NOT NULL
 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 FOREIGN KEY (source_msg_id) REFERENCES messages(id) ON DELETE SET NULL
 ```
-
-### Key Views
-
-#### `v_recent_sessions`
-Joins sessions with message count for display in sessions list.
-
-#### `v_session_stats`
-Aggregates statistics by language and mode.
-
----
-
-## Build & Run
-
-### Requirements
-- GHC 9.6.3+ (tested with 9.8.2)
-- Cabal 3.10+
-- OpenRouter API key (or other LLM provider)
-- Windows: Use Windows Terminal, PowerShell, or Command Prompt (NOT Git Bash/mintty)
-
-### Commands
-
-```bash
-# Build project
-cabal build
-
-# Run tests
-cabal test
-cabal test --test-show-details=streaming
-
-# Run application
-cabal run tapir
-
-# Clean rebuild
-cabal clean && cabal build
-
-# Development with watch mode (requires ghcid)
-ghcid --command="cabal repl"
-```
-
-### First Run
-
-1. Create config directory: `mkdir -p ~/.config/tapir/languages`
-2. Create `~/.config/tapir/config.yaml` (see structure above)
-3. Copy `languages/spanish.yaml` to `~/.config/tapir/languages/`
-4. Set API key: `export OPENROUTER_API_KEY="sk-or-v1-..."` (or add to config)
-5. Run: `cabal run tapir`
-
----
-
-## Keyboard Shortcuts
-
-| Key | Action |
-|-----|--------|
-| **Navigation** |
-| `Tab` / `Shift+Tab` | Cycle modes (Chat/Correct/Translate/Card) |
-| `1` / `2` / `3` / `4` | Jump to specific mode |
-| **Input** |
-| `Enter` | Send message |
-| `Ctrl+C` | Clear editor |
-| **Chat** |
-| `PageUp` / `PageDown` | Scroll history |
-| **Sessions** |
-| `Ctrl+N` | New session |
-| `Ctrl+S` | Open sessions list |
-| **Modals** |
-| `F1` / `?` | Help modal |
-| `F2` / `Ctrl+,` | Settings modal |
-| `Esc` | Close modal |
-| **Quit** |
-| `Ctrl+Q` | Quit (with confirmation) |
-| `Ctrl+C` (empty editor) | Quit |
 
 ---
 
@@ -393,6 +351,14 @@ case result of
 ```haskell
 data Role = User | Assistant | System
 
+data Mode
+  = Conversation
+  | Correction
+  | Translation
+  | CardGeneration
+
+data LearnerLevel = A1 | A2 | B1 | B2 | C1 | C2
+
 data Message = Message
   { messageId         :: Maybe Int
   , messageSessionId  :: Text
@@ -457,6 +423,7 @@ data Modal
   | SettingsModal
   | ConfirmQuitModal
   | ErrorModal TapirError
+  | PromptPreviewModal Mode Text
 
 data RequestState
   = Idle
@@ -479,48 +446,55 @@ data TapirEvent
 
 ---
 
-## Testing
+## Common Functions by Task
 
-### Test Structure
-```
-test/
-├── Spec.hs                    # Main test entry
-└── Tapir/
-    ├── Config/
-    │   └── LoaderSpec.hs    # Config loading tests
-    ├── Client/
-    │   └── LLMSpec.hs      # LLM client tests
-    └── Db/
-        └── RepositorySpec.hs # Database operations tests
-```
+| Task | Function | Location |
+|------|----------|----------|
+| Load config | `loadConfig` | `Tapir.Config.Loader` |
+| Load language module | `loadLanguageModule` | `Tapir.Config.Loader` |
+| Get system prompt | `getSystemPrompt` | `Tapir.Config.Loader` |
+| Interpolate prompt | `interpolatePrompt` | `Tapir.Config.Loader` |
+| Create LLM client | `mkLLMClient` | `Tapir.Client.LLM` |
+| Send streaming request | `llmStreamComplete` | `Tapir.Client.LLM` |
+| Save message | `saveMessage` | `Tapir.Db.Repository` |
+| Get messages | `getMessagesBySession` | `Tapir.Db.Repository` |
+| Create session | `createSession` | `Tapir.Db.Repository` |
+| List sessions | `listSessions` | `Tapir.Db.Repository` |
+| Delete session | `deleteSession` | `Tapir.Db.Repository` |
+| Check Anki | `checkAnkiConnection` | `Tapir.Client.Anki` |
+| Add Anki note | `addNote` | `Tapir.Client.Anki` |
+| Parse card JSON | `parseCardJson` | `Tapir.UI.App` |
 
-### Running Tests
+---
 
-```bash
-# All tests
-cabal test
+## Keyboard Shortcuts
 
-# With details
-cabal test --test-show-details=streaming
-
-# Specific test suite
-cabal test --test-option=--match="/Repository/"
-```
-
-### Test Patterns
-
-```haskell
-spec :: Spec
-spec = do
-  describe "loadConfig" $ do
-    it "loads valid config" $ do
-      result <- loadConfig
-      result `shouldSatisfy` isRight
-
-    it "returns Left for missing config" $ do
-      result <- loadConfig "nonexistent.yaml"
-      result `shouldSatisfy` isLeft
-```
+| Key | Action |
+|-----|--------|
+| **Navigation** | |
+| `Tab` / `Shift+Tab` | Cycle modes (Chat/Correct/Translate/Card) |
+| `1` / `2` / `3` / `4` | Jump to specific mode |
+| `PageUp` / `PageDown` | Scroll history |
+| **Input** | |
+| `Enter` | Send message |
+| `Ctrl+C` | Clear editor (or quit if empty) |
+| **Sessions** | |
+| `Ctrl+N` | New session |
+| `Ctrl+S` | Open sessions list |
+| `J` / `K` | Navigate session list |
+| `D` | Delete session (in list) |
+| `N` | Create new session (in list) |
+| **Settings** | |
+| `F2` / `Ctrl+,` | Settings modal |
+| `+` / `-` | Cycle learner level (in settings) |
+| `E` | View system prompt (in settings) |
+| **Cards** | |
+| `Ctrl+A` | Show pending card |
+| **Modals** | |
+| `?` / `F1` | Help modal |
+| `Esc` | Close modal |
+| **Quit** | |
+| `Ctrl+Q` | Quit (with confirmation) |
 
 ---
 
@@ -543,7 +517,7 @@ async $ do
 
 ### 2. Using `txtWrap` in Viewport
 **Problem:** `txtWrap` creates infinite-height widget, viewport crashes
-**Solution:** Use `txt` (implement wrapping manually if needed)
+**Solution:** Use `txt` with manual wrapping via `word-wrap` package
 
 ### 3. Windows Terminal Issues
 **Symptoms:** "GetConsoleScreenBufferInfo: invalid argument"
@@ -555,7 +529,6 @@ async $ do
 **Solutions:**
 - Set environment: `export OPENROUTER_API_KEY="sk-or-v1-..."`
 - Add to config.yaml: `api_key: "sk-or-v1-..."`
-- Use `api_key_env` in config
 
 ### 5. Unicode Display Issues
 **Symptoms:** Unicode characters display as boxes
@@ -564,142 +537,48 @@ async $ do
 - Set locale: `export LANG=en_US.UTF-8`
 - Use a modern terminal (Windows Terminal, iTerm2, etc.)
 
----
-
-## Remaining Implementation Work
-
-### Phase 5: Integration (Current)
-
-- [x] Wire message persistence to database
-- [x] Implement session save/load
-- [ ] Fix text wrapping in chat viewport
-- [ ] Add system prompt injection per mode
-
-### Phase 6: Polish (Upcoming)
-
-- [ ] Implement settings modal functionality
-- [ ] Card generation improvements (robust JSON parsing)
-- [ ] Anki integration enhancements
-- [ ] Error display improvements
-- [ ] UI theming options
-- [ ] Word wrapping in viewport
-- [ ] Language switching at runtime
-- [ ] Level adjustment in settings
+### 6. Language Module Not Found
+**Symptoms:** "Language module not found" error
+**Solutions:**
+- Ensure `~/.config/tapir/languages/spanish.yaml` exists
+- Check `active_language` in config matches filename (without `.yaml`)
 
 ---
 
-## Reference Documentation
+## Testing
 
-The `impl docs/` directory (not tracked in git) contains comprehensive reference:
+### Running Tests
 
-1. **TAPIR_impl_Specification.md** - Complete architecture and design
-2. **TAPIR_impl_Addendum.md** - Build config, schemas, API details, rate limiting, logging
-3. **TAPIR_impl_Checklist.md** - Implementation roadmap and validation steps
-4. **TAPIR_Scaffolding_Guide.md** - Exact directory structure and file templates
-
-### When to Check Impl Docs
-
-- **Before implementing**: Review Specification for architecture
-- **When adding features**: Check Addendum for technical details
-- **When stuck**: Look at Checklist for validation steps
-- **When creating files**: Use Scaffolding Guide for correct structure
-
----
-
-## Development Workflow
-
-### 1. Making Changes
-1. Read relevant source files to understand context
-2. Check impl docs for architectural guidance
-3. Make changes following existing patterns
-4. Run `cabal build` to check for errors
-5. Run tests if applicable: `cabal test`
-6. Test manually: `cabal run tapir`
-
-### 2. Adding New Features
-1. Define types in appropriate `Tapir.Types.*` module
-2. Implement business logic in appropriate service module
-3. Update UI in `Tapir.UI.*` modules
-4. Add tests to `test/Tapir/`
-5. Update this AGENTS.md if architectural patterns change
-
-### 3. Debugging
-
-**Enable debug output:**
-```haskell
-import Debug.Trace
-
-handleEvent e = trace ("Event: " ++ show e) $ do
-  -- your handler
-```
-
-**Check database:**
 ```bash
-sqlite3 ~/.local/share/tapir/tapir.db ".schema"
-sqlite3 ~/.local/share/tapir/tapir.db "SELECT * FROM sessions LIMIT 5;"
+# All tests
+cabal test
+
+# With output
+cabal test --test-show-details=streaming
+
+# Specific test suite
+cabal test --test-option=--match="/Repository/"
 ```
 
-**Check API requests:**
-- Network errors: Check `network` logs
-- API errors: Check `NetworkError text` in TapirError
-- Streaming issues: Check `processSSEStream` in OpenRouter.hs
+### Test Coverage
+- **LLM Types**: JSON serialization/parsing
+- **Config Loader**: Prompt interpolation, YAML loading
+- **Database**: Schema, CRUD, transactions, foreign keys, cascades
 
----
+### Adding Tests
 
-## Technology Stack
+```haskell
+spec :: Spec
+spec = do
+  describe "loadConfig" $ do
+    it "loads valid config" $ do
+      result <- loadConfig
+      result `shouldSatisfy` isRight
 
-### Dependencies
-
-**Core:**
-- `base >= 4.17 && < 5`
-- `text >= 2.0`
-- `bytestring >= 0.11`
-- `containers >= 0.6`
-- `time >= 1.12`
-- `uuid >= 1.3`
-
-**TUI:**
-- `brick >= 2.1` - Main TUI framework
-- `vty >= 6.0` - Terminal handling
-- `vty-unix >= 0.2` - Unix terminal support
-- `microlens >= 0.4` - Lens library
-- `microlens-th >= 0.4` - Template Haskell for lenses
-
-**HTTP & JSON:**
-- `req >= 3.13` - HTTP client
-- `aeson >= 2.1` - JSON library
-- `aeson-pretty >= 0.8` - Pretty JSON printing
-- `http-client >= 0.7` - HTTP client backend
-- `http-types >= 0.12` - HTTP types
-
-**Database:**
-- `sqlite-simple >= 0.4` - SQLite bindings
-
-**Config & CLI:**
-- `optparse-applicative >= 0.18` - CLI parsing
-- `directory >= 1.3` - File system operations
-- `filepath >= 1.4` - Path manipulation
-- `yaml >= 0.11` - YAML parsing
-
-**Utilities:**
-- `mtl >= 2.3` - Monad transformers
-- `transformers >= 0.6` - Transformer utilities
-- `exceptions >= 0.10` - Exception handling
-- `async >= 2.2` - Async operations
-- `stm >= 2.5` - Software transactional memory
-- `word-wrap >= 0.5` - Text wrapping
-
-### GHC Extensions Used
-
-- `OverloadedStrings` - String literals as `Text`
-- `DeriveGeneric` - Generic deriving for JSON
-- `DerivingStrategies` - Newtype deriving
-- `GeneralizedNewtypeDeriving` - Newtype deriving
-- `RecordWildCards` - Record pattern matching
-- `LambdaCase` - `\case` syntax
-- `TypeApplications` - Explicit type application
-- `TemplateHaskell` - Lenses generation
-- `QuasiQuotes` - Raw string literals (SQL)
+    it "returns Left for missing config" $ do
+      result <- loadConfig "nonexistent.yaml"
+      result `shouldSatisfy` isLeft
+```
 
 ---
 
@@ -731,7 +610,7 @@ X-Title: TAPIR Language Learning Assistant
 }
 ```
 
-**Streaming Response:**
+**Streaming Response (SSE):**
 ```
 data: {"id":"gen-xxx","model":"z-ai/glm-4.7","choices":[{"delta":{"content":"Hello"},"index":0}]}
 
@@ -743,6 +622,11 @@ data: [DONE]
 ### AnkiConnect API
 
 **Endpoint:** `http://localhost:8765`
+
+**Check Connection:**
+```json
+{"action": "version", "version": 6}
+```
 
 **Add Note Request:**
 ```json
@@ -776,81 +660,124 @@ data: [DONE]
 
 ---
 
-## Quick Reference
+## Technology Stack
 
-### File Locations by Concern
+### Core Dependencies
+- `base >= 4.17 && < 5`
+- `text >= 2.0`
+- `bytestring >= 0.11`
+- `containers >= 0.6`
+- `time >= 1.12`
+- `uuid >= 1.3`
 
-| Concern | File Location |
-|----------|---------------|
-| Entry point | `app/Main.hs` |
-| Main app logic | `src/Tapir/UI/App.hs` |
-| Event handling | `src/Tapir/UI/App.hs` (handleEvent, handleCustomEvent) |
-| UI rendering | `src/Tapir/UI/Chat.hs`, `Input.hs`, `StatusBar.hs` |
-| State types | `src/Tapir/UI/Types.hs` |
-| Config loading | `src/Tapir/Config/Loader.hs` |
-| Database ops | `src/Tapir/Db/Repository.hs` |
-| LLM client | `src/Tapir/Client/LLM.hs`, `Client/LLM/OpenRouter.hs` |
-| Anki client | `src/Tapir/Client/Anki.hs` |
+### TUI
+- `brick >= 2.1` - Main TUI framework
+- `vty >= 6.0` - Terminal handling
+- `vty-unix >= 0.2` - Unix terminal support
+- `vty-crossplatform` - Cross-platform terminal
+- `microlens >= 0.4` - Lens library
+- `microlens-th >= 0.4` - Template Haskell for lenses
 
-### Common Functions by Task
+### HTTP & JSON
+- `req >= 3.13` - HTTP client
+- `aeson >= 2.1` - JSON library
+- `aeson-pretty >= 0.8` - Pretty JSON printing
+- `http-client >= 0.7` - HTTP client backend
+- `http-types >= 0.12` - HTTP types
 
-| Task | Function | Location |
-|------|-----------|----------|
-| Load config | `loadConfig` | `Tapir.Config.Loader` |
-| Load language module | `loadLanguageModule` | `Tapir.Config.Loader` |
-| Get system prompt | `getSystemPrompt` | `Tapir.Config.Loader` |
-| Create LLM client | `mkLLMClient` | `Tapir.Client.LLM` |
-| Send streaming request | `llmStreamComplete` | `Tapir.Client.LLM` |
-| Save message | `saveMessage` | `Tapir.Db.Repository` |
-| Create session | `createSession` | `Tapir.Db.Repository` |
-| Add Anki note | `addNote` | `Tapir.Client.Anki` |
+### Database
+- `sqlite-simple >= 0.4` - SQLite bindings
 
-### Mode Labels
+### Config & Utilities
+- `yaml >= 0.11` - YAML parsing
+- `directory >= 1.3` - File system operations
+- `filepath >= 1.4` - Path manipulation
+- `mtl >= 2.3` - Monad transformers
+- `async >= 2.2` - Async operations
+- `stm >= 2.5` - Software transactional memory
+- `word-wrap >= 0.5` - Text wrapping
 
-| Mode ID | Label | Purpose |
-|---------|-------|---------|
-| `conversation` | "Chat" | Conversational practice |
-| `correction` | "Correct" | Grammar correction |
-| `translation` | "Translate" | Bidirectional translation |
-| `card_generation` | "Card" | Anki flashcard generation |
-
----
-
-## Getting Help
-
-### When Stuck
-
-1. **Check impl docs**: `impl docs/` directory has full specifications
-2. **Review similar code**: Look at existing implementations in same module
-3. **Check types**: Type errors often reveal architectural issues
-4. **Read Haskell docs**: https://hackage.haskell.org/
-
-### Common Error Messages
-
-- `"infinite-height widget in viewport"`: Using `txtWrap` instead of `txt`
-- `"GetConsoleScreenBufferInfo: invalid argument"`: Wrong terminal on Windows
-- `"API key not configured"`: Set `OPENROUTER_API_KEY` or add to config
-- `"Language module not found"`: Ensure `~/.config/tapir/languages/spanish.yaml` exists
-- `"Could not find module 'Brick'"`: Run `cabal build --only-dependencies`
+### GHC Extensions Used
+- `OverloadedStrings` - String literals as `Text`
+- `DeriveGeneric` - Generic deriving for JSON
+- `DerivingStrategies` - Newtype deriving
+- `GeneralizedNewtypeDeriving` - Newtype deriving
+- `RecordWildCards` - Record pattern matching
+- `LambdaCase` - `\case` syntax
+- `TypeApplications` - Explicit type application
+- `TemplateHaskell` - Lenses generation
+- `QuasiQuotes` - Raw string literals (SQL)
 
 ---
 
-## Summary
+## Development Workflow
 
-This guide covers the essential aspects of TAPIR for AI agents:
+### Making Changes
+1. Read relevant source files to understand context
+2. Check impl docs for architectural guidance
+3. Make changes following existing patterns
+4. Run `cabal build` to check for errors
+5. Run tests if applicable: `cabal test`
+6. Test manually: `cabal run tapir`
 
-1. ✅ Project overview and current status
-2. ✅ Complete architecture understanding
-3. ✅ Configuration system details
-4. ✅ Database schema reference
-5. ✅ Build and run instructions
-6. ✅ Keyboard shortcuts
-7. ✅ Architecture patterns and conventions
-8. ✅ Common pitfalls and solutions
-9. ✅ Testing guidelines
-10. ✅ External API documentation
-11. ✅ Quick reference tables
+### Adding New Features
+1. Define types in appropriate `Tapir.Types.*` module
+2. Implement business logic in appropriate service module
+3. Update UI in `Tapir.UI.*` modules
+4. Add tests to `test/Tapir/`
+5. Update documentation if architectural patterns change
+
+### Debugging
+
+**Enable debug output:**
+```haskell
+import Debug.Trace
+
+handleEvent e = trace ("Event: " ++ show e) $ do
+  -- your handler
+```
+
+**Check database:**
+```bash
+sqlite3 ~/.local/share/tapir/tapir.db ".schema"
+sqlite3 ~/.local/share/tapir/tapir.db "SELECT * FROM sessions LIMIT 5;"
+sqlite3 ~/.local/share/tapir/tapir.db "SELECT * FROM messages ORDER BY id DESC LIMIT 10;"
+```
+
+---
+
+## Reference Documentation
+
+The `impl docs/` directory contains comprehensive specifications:
+
+1. **TAPIR_impl_Specification.md** - Complete architecture and design
+2. **TAPIR_impl_Addendum.md** - Build config, schemas, API details, rate limiting
+3. **TAPIR_impl_Checklist.md** - Implementation roadmap and validation steps
+4. **TAPIR_Scaffolding_Guide.md** - Directory structure and file templates
+
+### When to Check Impl Docs
+- **Before implementing**: Review Specification for architecture
+- **When adding features**: Check Addendum for technical details
+- **When stuck**: Look at Checklist for validation steps
+- **When creating files**: Use Scaffolding Guide for correct structure
+
+---
+
+## Summary for Agents
+
+This guide provides everything needed to work with TAPIR:
+
+1. **Quick Start** - Build commands and key file locations
+2. **Architecture** - Event flow, streaming, state management patterns
+3. **Types** - Core domain types and UI types
+4. **Configuration** - YAML structure and prompt variables
+5. **Database** - Schema and repository functions
+6. **APIs** - OpenRouter and AnkiConnect integration
+7. **Troubleshooting** - Common issues and solutions
+8. **Testing** - Running and writing tests
 
 For detailed specifications, refer to `impl docs/` directory.
 
-**Happy coding! 🚀**
+---
+
+*Last Updated: January 22, 2026*

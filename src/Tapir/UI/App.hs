@@ -55,9 +55,9 @@ import Lens.Micro.Mtl ((.=), (%=), use)
 
 import Tapir.Types
 import Tapir.Config.Types (AppConfig(..), UIConfig(..))
-import Tapir.Config.Loader (getSystemPrompt, loadLanguageModule)
+import Tapir.Config.Loader (getSystemPrompt, loadLanguageModule, loadConfig)
 import Tapir.Client.LLM
-import Tapir.Client.Anki (mkAnkiClient, checkConnection, addNote, AnkiNote(..), defaultNoteOptions)
+import Tapir.Client.Anki (mkAnkiClientWithConfig, checkConnection, addNote, AnkiNote(..), defaultNoteOptions)
 import Tapir.Db.Repository (createSession, saveMessage, saveCard, getRecentSessions, getSessionMessages, updateSessionTimestamp, markCardPushed, deleteSession)
 import Tapir.UI.Types
 import Tapir.UI.Attrs (getAttrMap, attrBorder)
@@ -141,8 +141,9 @@ mkInitialState config langMod client conn chan = do
   -- Persist session to database
   _ <- createSession conn session
 
-  -- Create Anki client
-  ankiClient <- mkAnkiClient
+  -- Create Anki client with config
+  let ankiCfg = configAnki config
+  ankiClient <- mkAnkiClientWithConfig ankiCfg
 
   -- Check Anki connection status asynchronously
   _ <- forkIO $ do
@@ -494,7 +495,15 @@ handleModalEvent ev = do
             Right newLangMod -> writeBChan (_asEventChannel appState) (EvLanguageReloaded newLangMod)
             Left _ -> pure ()
         asModal .= NoModal
-      EvKey (KChar 'r') [] -> asModal .= NoModal  -- TODO: Reload
+      EvKey (KChar 'r') [] -> do
+        -- Reload config file
+        appState <- get
+        liftIO $ do
+          result <- loadConfig
+          case result of
+            Right newConfig -> writeBChan (_asEventChannel appState) (EvConfigReloaded newConfig)
+            Left _ -> pure ()  -- On error, silently fail (could show error modal)
+        asModal .= NoModal
       EvKey (KChar 'e') [] -> do
         -- Edit prompts - show system prompt for current mode
         settingsState <- get
@@ -767,7 +776,7 @@ sendLLMRequest st chan client langMod userMsg = do
       , cmContent = messageContent msg
       }
 
-    providerDefaultModel _cfg = "z-ai/glm-4.7"  -- TODO: Get from config
+    providerDefaultModel cfg = providerModel (configProvider cfg)
 
 -- ════════════════════════════════════════════════════════════════
 -- HELPER FUNCTIONS

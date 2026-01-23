@@ -6,6 +6,7 @@ module Tapir.Config.Defaults
   , defaultUIConfig
   , defaultDatabaseConfig
   , defaultLoggingConfig
+  , defaultAnkiConfig
   ) where
 
 import Tapir.Config.Types
@@ -19,6 +20,7 @@ defaultConfig = AppConfig
   , configUI = defaultUIConfig
   , configDatabase = defaultDatabaseConfig
   , configLogging = defaultLoggingConfig
+  , configAnki = defaultAnkiConfig
   }
 
 -- | Default provider (OpenRouter with z-ai/glm-4.7)
@@ -66,4 +68,12 @@ defaultLoggingConfig = LoggingConfig
   , logFile = "~/.local/share/tapir/tapir.log"
   , logMaxSizeMb = 10
   , logRotate = True
+  }
+
+-- | Default Anki client config
+defaultAnkiConfig :: AnkiClientConfig
+defaultAnkiConfig = AnkiClientConfig
+  { ankiHost = "localhost"
+  , ankiPort = 8765
+  , ankiTimeoutSeconds = 5
   }

@@ -23,6 +23,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 
 import Tapir.Types
+import Tapir.Config.Types (AppConfig(..))
 import Tapir.UI.Types
 import Tapir.UI.Attrs
 
@@ -73,10 +74,16 @@ renderLanguageCompact st =
       levelText = T.pack $ show level
   in withAttr attrStatusLanguage $ txt $ langName' <> " " <> levelText
 
--- | Compact model display
+-- | Compact model display (shows short model name from config)
 renderModelCompact :: AppState -> Widget Name
-renderModelCompact _st =
-  withAttr attrStatusModel $ txt "glm-4.7"
+renderModelCompact st =
+  let cfg = _asConfig st
+      fullModel = providerModel (configProvider cfg)
+      -- Extract short name: "z-ai/glm-4.7" -> "glm-4.7"
+      shortModel = case T.splitOn "/" fullModel of
+        [_, name] -> name
+        _         -> fullModel  -- Use full name if no slash
+  in withAttr attrStatusModel $ txt shortModel
 
 -- | Compact Anki indicator
 renderAnkiIndicator :: Bool -> Widget Name

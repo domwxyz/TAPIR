@@ -3,7 +3,7 @@
 **Project:** TAPIR (Translation API Router)
 **Type:** Haskell + brick TUI for language learning
 **Location:** ~/dev/TAPIR/
-**Status:** Phase 5 - Integration (In Progress)
+**Status:** Complete (Phase 6/6)
 
 ---
 
@@ -13,19 +13,21 @@
 
 - **Configuration**: YAML config loading from `~/.config/tapir/config.yaml`
 - **Language Modules**: Spanish module loads from `~/.config/tapir/languages/spanish.yaml`
-- **Database**: SQLite with full schema, repository pattern, tested
+- **Database**: SQLite with full schema, repository pattern, tested, message persistence
 - **LLM Client**: OpenRouter integration with streaming support
 - **TUI**: brick-based interface with chat, input, status bar, modals
 - **Streaming**: Real-time token display via BChan
-- **Mode Switching**: All four modes accessible (Chat, Correct, Translate, Card)
+- **Mode Switching**: All four modes (Chat, Correct, Translate, Card)
+- **Session Management**: Create, list, load, delete sessions with message history
+- **Settings Modal**: Level cycling, prompt preview, language settings
+- **Card Generation**: Robust JSON parsing with markdown fence handling
+- **Anki Integration**: Connection checking, note pushing via AnkiConnect
+- **Text Wrapping**: Dynamic width calculation for proper message display
 
 ### Known Issues
 
-- **Text wrapping**: Long messages don't wrap in the viewport
 - **Windows terminals**: Must use Windows Terminal/PowerShell (not Git Bash/mintty)
-- **Settings modal**: Placeholder only, edit config.yaml directly
-- **Message persistence**: Not yet wired to database
-- **Session management**: Basic implementation, needs completion
+- **Ctrl+, shortcut**: May not work on some terminals; use F2 as alternative
 
 ---
 
@@ -49,9 +51,10 @@ TAPIR/
 │   │   └── Defaults.hs       # Default configuration
 │   ├── Client/
 │   │   ├── LLM.hs            # Abstract LLM interface
-│   │   └── LLM/
-│   │       ├── Types.hs      # ChatMessage, ChatRequest, etc.
-│   │       └── OpenRouter.hs # OpenRouter implementation
+│   │   ├── LLM/
+│   │   │   ├── Types.hs      # ChatMessage, ChatRequest, etc.
+│   │   │   └── OpenRouter.hs # OpenRouter implementation
+│   │   └── Anki.hs           # AnkiConnect client
 │   ├── Db/
 │   │   ├── Schema.hs         # Database initialization
 │   │   └── Repository.hs     # CRUD operations
@@ -90,9 +93,16 @@ provider:
 
 ui:
   theme: default
+  chat:
+    show_timestamps: true
 
 database:
   path: "~/.local/share/tapir/tapir.db"
+
+anki:
+  enabled: true
+  host: "localhost"
+  port: 8765
 ```
 
 ### Language Module Location
@@ -115,6 +125,9 @@ cabal run tapir
 
 # Clean rebuild
 cabal clean && cabal build
+
+# Interactive REPL
+cabal repl
 ```
 
 ---
@@ -123,35 +136,29 @@ cabal clean && cabal build
 
 | Key | Action |
 |-----|--------|
-| `Enter` | Send message |
+| **Navigation** | |
 | `Tab` / `Shift+Tab` | Cycle modes |
 | `1-4` | Jump to mode |
-| `Ctrl+P` | Command menu |
-| `F1` | Help modal |
-| `F2` | Settings modal |
+| `PageUp/Down` | Scroll history |
+| **Input** | |
+| `Enter` | Send message |
+| `?` | Help (when chat focused) |
+| **Sessions** | |
 | `Ctrl+N` | New session |
 | `Ctrl+S` | Sessions list |
+| `J` / `K` | Navigate list |
+| `D` | Delete session |
+| **Settings** | |
+| `F2` / `Ctrl+,` | Settings modal |
+| `+` / `-` | Cycle learner level |
+| `E` | View system prompt |
+| **Cards** | |
 | `Ctrl+A` | Show pending card |
-| `Ctrl+Q` | Quit (with confirmation) |
-| `PageUp/Down` | Scroll history |
+| **Modals** | |
 | `Esc` | Close modal |
-
----
-
-## Remaining Work
-
-### Phase 5: Integration (Current)
-- [ ] Wire message persistence to database
-- [ ] Implement session save/load
-- [ ] Fix text wrapping in chat viewport
-- [ ] Add system prompt injection per mode
-
-### Phase 6: Polish
-- [ ] Implement settings modal functionality
-- [ ] Card generation and preview
-- [ ] Anki integration via AnkiConnect
-- [ ] Error display improvements
-- [ ] UI theming options
+| **Quit** | |
+| `Ctrl+Q` | Quit (with confirmation) |
+| `Ctrl+C` | Cancel / Quit |
 
 ---
 
@@ -216,9 +223,8 @@ cabal test --test-option=--match="/Repository/"
 - Ensure `~/.config/tapir/languages/spanish.yaml` exists
 - Check `active_language` in config matches filename
 
-### "infinite-height widget in viewport"
-- Using `txtWrap` in a viewport
-- Solution: Use `txt` instead (wrapping needs manual implementation)
+### "Could not find module 'Brick'"
+- Run `cabal build --only-dependencies` first
 
 ---
 

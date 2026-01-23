@@ -26,6 +26,7 @@ module Tapir.Db.Schema
   ) where
 
 import Control.Exception (try, SomeException)
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Database.SQLite.Simple
@@ -197,14 +198,12 @@ initializeDatabase conn = do
     -- Run any pending migrations
     runMigrations conn
 
-    -- Verify schema version
-    verifySchemaVersion conn
-
   case result of
     Left (e :: SomeException) ->
       pure $ Left $ DatabaseError $ T.pack $ show e
-    Right () ->
-      pure $ Right ()
+    Right () -> do
+      -- Verify schema version (returns Either, handle gracefully)
+      verifySchemaVersion conn
 
 -- | Create all database tables
 createTables :: Connection -> IO ()
@@ -225,16 +224,29 @@ createTables conn = do
   execute_ conn sessionStatsViewSQL
 
 -- | Verify the schema version matches expected
-verifySchemaVersion :: Connection -> IO ()
+-- Returns Left on version mismatch or parse failure
+verifySchemaVersion :: Connection -> IO (Either TapirError ())
 verifySchemaVersion conn = do
-  [Only ver] <- query_ conn
+  result <- query_ conn
     "SELECT value FROM metadata WHERE key = 'schema_version'"
     :: IO [Only Text]
-  let currentVersion = read @Int $ T.unpack ver
-  if currentVersion == schemaVersion
-    then pure ()
-    else error $ "Schema version mismatch: expected "
-               <> show schemaVersion <> ", got " <> show currentVersion
+  case result of
+    [Only ver] ->
+      case readMaybe (T.unpack ver) of
+        Just currentVersion
+          | currentVersion == schemaVersion -> pure $ Right ()
+          | otherwise -> pure $ Left $ MigrationError schemaVersion $
+              "Schema version mismatch: expected " <> T.pack (show schemaVersion)
+              <> ", got " <> T.pack (show currentVersion)
+        Nothing -> pure $ Left $ DatabaseError $
+          "Invalid schema version in database: " <> ver
+    [] -> pure $ Left $ DatabaseError "No schema version found in metadata table"
+    _ -> pure $ Left $ DatabaseError "Multiple schema version entries found"
+  where
+    readMaybe :: String -> Maybe Int
+    readMaybe s = case reads s of
+      [(n, "")] -> Just n
+      _         -> Nothing
 
 -- ════════════════════════════════════════════════════════════════
 -- MIGRATIONS
@@ -253,14 +265,20 @@ migrationScripts =
   -- ]
 
 -- | Get current schema version from database
+-- Returns 0 for brand new database, or parsed version number
 getSchemaVersion :: Connection -> IO Int
 getSchemaVersion conn = do
   result <- query_ conn
     "SELECT value FROM metadata WHERE key = 'schema_version'"
     :: IO [Only Text]
   case result of
-    [Only ver] -> pure $ read @Int $ T.unpack ver
+    [Only ver] -> pure $ fromMaybe 0 (readMaybe $ T.unpack ver)
     _ -> pure 0  -- No version found, brand new DB
+  where
+    readMaybe :: String -> Maybe Int
+    readMaybe s = case reads s of
+      [(n, "")] -> Just n
+      _         -> Nothing
 
 -- | Run pending migrations
 runMigrations :: Connection -> IO ()

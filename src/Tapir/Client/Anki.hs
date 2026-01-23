@@ -18,6 +18,7 @@ module Tapir.Client.Anki
   ( -- * Client
     AnkiClient(..)
   , mkAnkiClient
+  , mkAnkiClientWithConfig
 
     -- * Operations
   , checkConnection
@@ -43,18 +44,20 @@ import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Network.HTTP.Types.Status (statusCode)
 
 import Tapir.Types (TapirError(..))
+import Tapir.Config.Types (AnkiClientConfig(..))
+import Tapir.Config.Defaults (defaultAnkiConfig)
 
 -- ════════════════════════════════════════════════════════════════
 -- CONFIGURATION
 -- ════════════════════════════════════════════════════════════════
 
--- | Default AnkiConnect URL (localhost)
-ankiConnectUrl :: String
-ankiConnectUrl = "http://localhost:8765"
-
 -- | AnkiConnect API version
 ankiConnectVersion :: Int
 ankiConnectVersion = 6
+
+-- | Build AnkiConnect URL from host and port
+buildAnkiUrl :: AnkiClientConfig -> String
+buildAnkiUrl cfg = "http://" <> T.unpack (ankiHost cfg) <> ":" <> show (ankiPort cfg)
 
 -- ════════════════════════════════════════════════════════════════
 -- CLIENT
@@ -66,15 +69,19 @@ data AnkiClient = AnkiClient
   , acBaseUrl :: !String
   }
 
--- | Create an AnkiConnect client
+-- | Create an AnkiConnect client with default configuration
 mkAnkiClient :: IO AnkiClient
-mkAnkiClient = do
+mkAnkiClient = mkAnkiClientWithConfig defaultAnkiConfig
+
+-- | Create an AnkiConnect client with custom configuration
+mkAnkiClientWithConfig :: AnkiClientConfig -> IO AnkiClient
+mkAnkiClientWithConfig cfg = do
   manager <- newManager tlsManagerSettings
-    { managerResponseTimeout = responseTimeoutMicro 5000000  -- 5 seconds
+    { managerResponseTimeout = responseTimeoutMicro (ankiTimeoutSeconds cfg * 1000000)
     }
   pure AnkiClient
     { acManager = manager
-    , acBaseUrl = ankiConnectUrl
+    , acBaseUrl = buildAnkiUrl cfg
     }
 
 -- ════════════════════════════════════════════════════════════════

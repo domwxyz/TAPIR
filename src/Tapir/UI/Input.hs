@@ -70,6 +70,13 @@ renderPlaceholder st =
         CustomMode _   -> "Enter input..."
   in withAttr attrPlaceholder $ txt modeHint
 
+-- | Default number of visible rows for the input editor
+-- This value balances screen space with the need to see multi-line input
+-- without scrolling. A value of 5 allows most short messages to be visible
+-- while keeping the chat history area large enough for readability.
+defaultEditorRows :: Int
+defaultEditorRows = 5
+
 -- ════════════════════════════════════════════════════════════════
 -- EDITOR HELPERS
 -- ════════════════════════════════════════════════════════════════
@@ -92,4 +99,4 @@ clearEditor = applyEdit (const $ textZipper [] Nothing)
 
 -- | Create a new input editor
 mkInputEditor :: Editor Text Name
-mkInputEditor = editor NameInputEditor (Just 5) ""
+mkInputEditor = editor NameInputEditor (Just defaultEditorRows) ""

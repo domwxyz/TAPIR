@@ -73,6 +73,13 @@ main = do
     client <- mkLLMClient (configProvider config)
     putStrLn "[OK] LLM client created"
 
+    -- Check for unimplemented providers
+    case llmProviderName client of
+      "Anthropic" -> putStrLn "[WARN] Anthropic provider is not yet implemented"
+      "OpenAI" -> putStrLn "[WARN] OpenAI provider is not yet implemented"
+      "Ollama" -> putStrLn "[WARN] Ollama provider is not yet implemented"
+      _ -> pure ()
+
     -- Check API key
     isConfigured <- llmIsConfigured client
     if isConfigured

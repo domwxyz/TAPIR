@@ -64,8 +64,9 @@ openRouterBaseUrl :: String
 openRouterBaseUrl = "https://openrouter.ai/api/v1/chat/completions"
 
 -- | HTTP Referer header (required by OpenRouter)
+-- This identifies the application to OpenRouter for analytics
 httpReferer :: ByteString
-httpReferer = "https://github.com/yourusername/tapir"
+httpReferer = "https://github.com/tapir-language/tapir"
 
 -- | App title header
 appTitle :: ByteString
@@ -304,9 +305,10 @@ processSSEStream bodyReader mCancelFlag onChunk = do
     -- Process a single SSE line
     processLine :: ByteString -> IO ()
     processLine line
-      -- Skip empty lines and comments
+      -- Skip empty lines
       | BS.null line = pure ()
-      | BS8.head line == ':' = pure ()
+      -- Skip SSE comments (lines starting with ':')
+      | Just (0x3A, _) <- BS.uncons line = pure ()  -- 0x3A = ':'
       -- Handle data lines
       | "data: " `BS.isPrefixOf` line = do
           let jsonData = BS.drop 6 line
