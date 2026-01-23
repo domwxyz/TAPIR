@@ -27,7 +27,7 @@ A keyboard-driven TUI (Terminal User Interface) for language learning with:
 ### Key Features
 
 - **Language-agnostic design**: All language-specific logic lives in YAML configs
-- **Modal interface**: Vim-like keyboard shortcuts for efficient navigation
+- **Command menu**: Ctrl+P for quick access to all commands
 - **Streaming responses**: Real-time token display for natural interaction
 - **Local persistence**: SQLite stores your learning history
 - **Privacy-focused**: Works with OpenRouter, Anthropic, OpenAI, or local Ollama
@@ -106,43 +106,52 @@ cabal run tapir
    export OPENROUTER_API_KEY="sk-or-v1-..."
    ```
 
-### Keyboard Shortcuts
+ ### Keyboard Shortcuts
 
 | Key | Action |
 |-----|--------|
-| **Navigation** | |
-| `Tab` / `Shift+Tab` | Switch modes |
-| `1` / `2` / `3` / `4` | Jump to mode (Chat/Correct/Translate/Card) |
-| `PageUp/Down` | Scroll history |
-| **Actions** | |
-| `Enter` | Send message |
-| `?` | Open help (when chat history has focus) |
-| **Sessions** | |
+| | **Main Interface** | |
+| `Ctrl+P` | Command menu |
 | `Ctrl+N` | New session |
 | `Ctrl+S` | Session list |
-| `J` / `K` | Navigate session list |
-| `D` | Delete session (in list) |
-| `N` | New session (in list) |
-| **Settings** | |
-| `Ctrl+,` or `F2` | Open settings |
-| `+` / `-` | Cycle learner level (in settings) |
-| `E` | View system prompt for current mode (in settings) |
-| **Cards** | |
 | `Ctrl+A` | Show pending card |
-| **Modals** | |
-| `Esc` | Close modal |
-| **Quit** | |
 | `Ctrl+Q` | Quit (with confirmation) |
-| `Ctrl+C` | Cancel / Quit |
+| `Ctrl+C` | Cancel request / Quit |
+| `F1` | Help |
+| `F2` | Settings |
+| | **Modes** | |
+| `Tab` / `Shift+Tab` | Next / Previous mode |
+| `1` / `2` / `3` / `4` | Jump to Chat/Correct/Translate/Card |
+| `PageUp` / `PageDown` | Scroll history |
+| `Enter` | Send message |
+| | **Modal Navigation** | |
+| `Esc` | Close modal |
+| `j` / `k` or `↑` / `↓` | Navigate list (command menu, sessions) |
+| `Enter` | Select / Execute |
+| | **Command Menu** | |
+| | Lists all available commands (Ctrl+P) |
+| | **Settings Modal** | |
+| `+` / `-` | Cycle learner level |
+| `E` | View system prompt |
+| `S` | Save settings |
+| `R` | Reload config |
+| | **Session List** | |
+| `D` | Delete session |
+| `N` | New session |
+| | **Card Preview** | |
+| `Enter` | Push to Anki |
+| `D` | Discard card |
 
 ### Modes
 
-1. **Chat** - Free conversation practice in your target language
-2. **Correct** - Grammar correction with detailed explanations
-3. **Translate** - Bidirectional translation between languages
-4. **Card** - Generate Anki flashcards from vocabulary
+1. **Chat** (1) - Free conversation practice in your target language
+2. **Correct** (2) - Grammar correction with detailed explanations
+3. **Translate** (3) - Bidirectional translation between languages
+4. **Card** (4) - Generate Anki flashcards from vocabulary
 
 Each mode has a dedicated system prompt that instructs the LLM how to respond appropriately.
+
+Press `Tab` to cycle through modes, or use `1-4` to jump directly.
 
 ## Project Structure
 
@@ -266,9 +275,6 @@ Ensure `~/.config/tapir/languages/spanish.yaml` exists and `active_language` mat
 
 ### "Anki not running" or card push fails
 Start Anki and ensure AnkiConnect plugin is installed (add-on code: 2055492159).
-
-### Ctrl+, doesn't open settings
-Some terminals don't support this shortcut. Use `F2` instead.
 
 ## License
 

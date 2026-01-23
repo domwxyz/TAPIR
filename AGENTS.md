@@ -70,7 +70,6 @@ TAPIR is a **language-agnostic terminal-based language learning assistant** buil
 
 ### Known Limitations
 - **Windows terminals**: Must use Windows Terminal/PowerShell (not Git Bash/mintty)
-- **Ctrl+, shortcut**: May not work on some terminals; use F2 as alternative
 
 ---
 
@@ -469,32 +468,39 @@ data TapirEvent
 
 ## Keyboard Shortcuts
 
-| Key | Action |
+ | Key | Action |
 |-----|--------|
+| **Main Interface** | |
+| `Ctrl+P` | Command menu |
+| `Ctrl+N` | New session |
+| `Ctrl+S` | Session list |
+| `Ctrl+A` | Show pending card |
+| `Ctrl+Q` | Quit (with confirmation) |
+| `Ctrl+C` | Cancel request / Quit |
+| `F1` | Help modal |
+| `F2` | Settings modal |
 | **Navigation** | |
 | `Tab` / `Shift+Tab` | Cycle modes (Chat/Correct/Translate/Card) |
 | `1` / `2` / `3` / `4` | Jump to specific mode |
 | `PageUp` / `PageDown` | Scroll history |
-| **Input** | |
 | `Enter` | Send message |
-| `Ctrl+C` | Clear editor (or quit if empty) |
-| **Sessions** | |
-| `Ctrl+N` | New session |
-| `Ctrl+S` | Open sessions list |
-| `J` / `K` | Navigate session list |
-| `D` | Delete session (in list) |
-| `N` | Create new session (in list) |
-| **Settings** | |
-| `F2` / `Ctrl+,` | Settings modal |
-| `+` / `-` | Cycle learner level (in settings) |
-| `E` | View system prompt (in settings) |
-| **Cards** | |
-| `Ctrl+A` | Show pending card |
-| **Modals** | |
-| `?` / `F1` | Help modal |
+| **Modal Navigation** | |
 | `Esc` | Close modal |
-| **Quit** | |
-| `Ctrl+Q` | Quit (with confirmation) |
+| `j` / `k` or `↑` / `↓` | Navigate list (command menu, sessions) |
+| `Enter` | Select / Execute |
+| **Command Menu** | |
+| | Lists all available commands (Ctrl+P) |
+| **Settings Modal** | |
+| `+` / `-` | Cycle learner level |
+| `E` | View system prompt |
+| `S` | Save settings |
+| `R` | Reload config |
+| **Session List** | |
+| `D` | Delete session |
+| `N` | New session |
+| **Card Preview** | |
+| `Enter` | Push to Anki |
+| `D` | Discard card |
 
 ---
 
