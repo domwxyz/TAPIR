@@ -68,9 +68,16 @@ module Tapir.UI.Attrs
   , attrCardDeck
 
     -- ** Help
-  , attrHelpKey
-  , attrHelpDescription
-  , attrHelpSection
+   , attrHelpKey
+   , attrHelpDescription
+   , attrHelpSection
+
+     -- ** Structured Response Sections
+   , attrSectionHeader
+   , attrSectionDivider
+   , attrCorrectionsSection
+   , attrChangesSection
+   , attrVocabSection
   ) where
 
 import Brick (AttrMap, AttrName, attrMap, attrName, on, fg)
@@ -147,6 +154,15 @@ attrHelpKey         = attrName "help" <> attrName "key"
 attrHelpDescription = attrName "help" <> attrName "description"
 attrHelpSection     = attrName "help" <> attrName "section"
 
+-- Structured Response Sections
+attrSectionHeader, attrSectionDivider :: AttrName
+attrCorrectionsSection, attrChangesSection, attrVocabSection :: AttrName
+attrSectionHeader       = attrName "response" <> attrName "sectionHeader"
+attrSectionDivider      = attrName "response" <> attrName "divider"
+attrCorrectionsSection  = attrName "response" <> attrName "corrections"
+attrChangesSection      = attrName "response" <> attrName "changes"
+attrVocabSection        = attrName "response" <> attrName "vocab"
+
 -- ════════════════════════════════════════════════════════════════
 -- ATTRIBUTE MAP (Dark Theme)
 -- ════════════════════════════════════════════════════════════════
@@ -208,10 +224,17 @@ defaultAttrMap = attrMap defAttr
   , (attrCardDeck,  fg magenta)
 
     -- Help
-  , (attrHelpKey,         withStyle (fg yellow) bold)
-  , (attrHelpDescription, fg white)
-  , (attrHelpSection,     withStyle (fg cyan) bold)
-  ]
+   , (attrHelpKey,         withStyle (fg yellow) bold)
+   , (attrHelpDescription, fg white)
+   , (attrHelpSection,     withStyle (fg cyan) bold)
+
+      -- Structured Response Sections
+   , (attrSectionHeader,       withStyle (fg cyan) bold)
+   , (attrSectionDivider,      fg blue)
+   , (attrCorrectionsSection,  withStyle (fg magenta) bold)
+   , (attrChangesSection,      withStyle (fg yellow) bold)
+   , (attrVocabSection,        withStyle (fg magenta) bold)
+   ]
 
 -- ════════════════════════════════════════════════════════════════
 -- ATTRIBUTE MAP (Light Theme)
@@ -270,10 +293,17 @@ lightAttrMap = attrMap defAttr
   , (attrCardDeck,  fg magenta)
 
     -- Help
-  , (attrHelpKey,         withStyle (fg brightBlack) bold)
-  , (attrHelpDescription, fg black)
-  , (attrHelpSection,     withStyle (fg blue) bold)
-  ]
+   , (attrHelpKey,         withStyle (fg brightBlack) bold)
+   , (attrHelpDescription, fg black)
+   , (attrHelpSection,     withStyle (fg blue) bold)
+
+      -- Structured Response Sections
+   , (attrSectionHeader,       withStyle (fg blue) bold)
+   , (attrSectionDivider,      fg brightBlack)
+   , (attrCorrectionsSection,  withStyle (fg magenta) bold)
+   , (attrChangesSection,      withStyle (fg brightBlack) bold)
+   , (attrVocabSection,        withStyle (fg blue) bold)
+   ]
 
 -- | Get attr map by theme name ("default", "dark", or "light")
 getAttrMap :: Text -> AttrMap

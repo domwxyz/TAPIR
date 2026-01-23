@@ -128,7 +128,7 @@ allTools =
 conversationTool :: Tool
 conversationTool = Tool "function" ToolFunction
   { tfName = "send_conversation_reply"
-  , tfDescription = "Send a conversational reply with vocabulary highlights and optional learning aids. Use this for all conversation responses."
+  , tfDescription = "Send a conversational reply. IMPORTANT: Always check the learner's message for errors and include corrections if any mistakes were made (spelling, grammar, accents, word choice). This helps them learn!"
   , tfStrict = True
   , tfParameters = object
       [ "type" .= ("object" :: Text)
@@ -138,26 +138,22 @@ conversationTool = Tool "function" ToolFunction
               [ "type" .= ("string" :: Text)
               , "description" .= ("Your conversational reply in the target language. Be natural and engaging." :: Text)
               ]
+          , "corrections" .= object
+              [ "type" .= ("array" :: Text)
+              , "description" .= ("IMPORTANT: Corrections for ANY errors in the learner's message - missing accents, wrong verb forms, spelling mistakes, etc. Include even minor errors like missing accent marks. Empty array only if their message was perfect." :: Text)
+              , "items" .= correctionSchema
+              ]
           , "vocab_highlights" .= object
               [ "type" .= ("array" :: Text)
-              , "description" .= ("2-3 vocabulary items from your reply that are useful for the learner to know" :: Text)
+              , "description" .= ("1-2 useful vocabulary items from your reply (keep it brief)" :: Text)
               , "items" .= vocabHighlightSchema
               ]
           , "grammar_tip" .= object
               [ "type" .= ("string" :: Text)
-              , "description" .= ("Brief grammar note if your reply uses an interesting or tricky construction" :: Text)
-              ]
-          , "follow_up" .= object
-              [ "type" .= ("string" :: Text)
-              , "description" .= ("A suggested follow-up question to keep the conversation going" :: Text)
-              ]
-          , "corrections" .= object
-              [ "type" .= ("array" :: Text)
-              , "description" .= ("Gentle corrections if the learner made errors in their message" :: Text)
-              , "items" .= correctionSchema
+              , "description" .= ("Optional: Brief grammar note only if particularly relevant" :: Text)
               ]
           ]
-      , "required" .= (["reply", "vocab_highlights"] :: [Text])
+      , "required" .= (["reply", "corrections", "vocab_highlights"] :: [Text])
       ]
   }
 

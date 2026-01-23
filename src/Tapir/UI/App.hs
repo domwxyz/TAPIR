@@ -58,7 +58,7 @@ import Tapir.Types.Response (StructuredResponse(..), responseToText, CardRespons
 import Tapir.Config.Types (AppConfig(..), UIConfig(..))
 import Tapir.Config.Loader (getSystemPrompt, loadLanguageModule, loadConfig)
 import Tapir.Client.LLM
-import Tapir.Client.LLM.Request (buildRequestWithTools, buildRequest)
+import Tapir.Client.LLM.Request (buildRequestWithTools)
 import Tapir.Client.LLM.Response (parseResponse, ParsedResponse(..), ParseError(..))
 import Tapir.Client.Anki (mkAnkiClientWithConfig, checkConnection, addNote, AnkiNote(..), defaultNoteOptions)
 import Tapir.Db.Repository (createSession, saveMessage, saveCard, getRecentSessions, getSessionMessages, updateSessionTimestamp, markCardPushed, deleteSession)
@@ -485,6 +485,7 @@ handleMainEvent ev = case ev of
         asInputEditor .= mkInputEditor
         asRequestState .= Requesting
         asLastError .= Nothing
+        asPendingStructured .= Nothing  -- Clear old structured response
 
         -- Update session timestamp
         _ <- liftIO $ updateSessionTimestamp conn sid
@@ -803,40 +804,19 @@ sendLLMRequest st chan client langMod userMsg = do
       messages = _asMessages st ++ [userMsg]
       config = _asConfig st
       
-      -- Decide: use tools for structured modes, stream for conversation
-      useTools = mode /= Conversation
-      
-  if useTools
-    then do
-      -- Build request with tools (non-streaming)
-      let req = buildRequestWithTools config langMod mode messages userMsg
-      
-      -- Non-streaming request
-      result <- llmComplete client req
-      case result of
-        Left err -> writeBChan chan (EvStreamError err)
-        Right resp -> 
-          case parseResponse mode resp of
-            ParsedStructured sr -> writeBChan chan (EvStructuredResponse sr)
-            ParsedRawText t -> writeBChan chan (EvStreamComplete t)
-            ParsedError pe -> writeBChan chan (EvStreamError (InternalError (peMessage pe)))
-    else do
-      -- Stream for conversation
-      let req = buildRequest config langMod mode messages userMsg
-          onToken token = writeBChan chan (EvStreamChunk token)
-      
-      result <- llmStreamComplete client req onToken Nothing
-      case result of
-        Left err -> writeBChan chan (EvStreamError err)
-        Right sr -> writeBChan chan (EvStreamComplete (srFullResponse sr))
-  where
-    toClientMessage :: Message -> ChatMessage
-    toClientMessage msg = ChatMessage
-      { cmRole    = roleToText (messageRole msg)
-      , cmContent = messageContent msg
-      }
+  -- All modes use tool calling for structured output
+  -- This gives us properly formatted responses with colors and sections
+  let req = buildRequestWithTools config langMod mode messages userMsg
 
-    providerDefaultModel cfg = providerModel (configProvider cfg)
+  -- Non-streaming request (tool calls don't stream well)
+  result <- llmComplete client req
+  case result of
+    Left err -> writeBChan chan (EvStreamError err)
+    Right resp ->
+      case parseResponse mode resp of
+        ParsedStructured sr -> writeBChan chan (EvStructuredResponse sr)
+        ParsedRawText t -> writeBChan chan (EvStreamComplete t)
+        ParsedError pe -> writeBChan chan (EvStreamError (InternalError (peMessage pe)))
 
 -- ════════════════════════════════════════════════════════════════
 -- HELPER FUNCTIONS

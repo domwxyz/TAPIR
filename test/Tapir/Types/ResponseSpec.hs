@@ -37,16 +37,15 @@ spec = do
     it "parses full JSON with all optional fields" $ do
       let json = BL.concat
             [ "{\"reply\":\"Hola\","
+            , "\"corrections\":[{\"original\":\"yo comer\",\"fixed\":\"yo como\",\"explanation\":\"conjugation\"}],"
             , "\"vocab_highlights\":[{\"word\":\"amigo\",\"translation\":\"friend\"}],"
-            , "\"grammar_tip\":\"Noun-adjective agreement\","
-            , "\"follow_up\":\"How are you?\","
-            , "\"corrections\":[]}"
+            , "\"grammar_tip\":\"Noun-adjective agreement\"}"
             ]
       case eitherDecode json of
         Right (resp :: ConversationResponse) -> do
           convReply resp `shouldBe` "Hola"
           convGrammarTip resp `shouldBe` Just "Noun-adjective agreement"
-          convFollowUp resp `shouldBe` Just "How are you?"
+          length (convCorrections resp) `shouldBe` 1
         Left err -> expectationFailure $ "Failed to parse: " ++ err
 
     it "parses vocab_highlights array" $ do
@@ -106,10 +105,9 @@ spec = do
     it "roundtrips through JSON encode/decode" $ do
       let resp = ConversationResponse
             { convReply = "Testing reply"
+            , convCorrections = []
             , convVocab = [VocabHighlight "test" "testing" (Just "noun") Nothing Nothing]
             , convGrammarTip = Just "Tip"
-            , convFollowUp = Nothing
-            , convCorrections = Nothing
             }
       decode (encode resp) `shouldBe` Just resp
 
@@ -412,7 +410,7 @@ spec = do
 
   describe "responseToText" $ do
     it "extracts convReply from SRConversation" $ do
-      let conv = ConversationResponse "Reply text" [] Nothing Nothing Nothing
+      let conv = ConversationResponse "Reply text" [] [] Nothing
       responseToText (SRConversation conv) `shouldBe` "Reply text"
 
     it "extracts crCorrected from SRCorrection" $ do

@@ -20,8 +20,6 @@ module Tapir.UI.Structured
   ) where
 
 import Brick
-import Brick.Widgets.Border (hBorder)
-import Brick.Widgets.Center (center)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Text.Wrap as Wrap
@@ -68,78 +66,85 @@ renderConversation ConversationResponse{..} =
     [ withAttr attrAssistantLabel $ txt "TAPIR"
     , padLeft (Pad 2) $ withAttr attrAssistantMessage $ txtWrapWords convReply
     ]
-    -- Inline corrections (if any)
+    -- Inline corrections (if any) - show prominently when user made mistakes
     ++ renderInlineCorrections convCorrections
-    -- Vocabulary highlights
-    ++ renderVocabSection convVocab
-    -- Grammar tip
+    -- Compact vocabulary (1-2 words max)
+    ++ renderCompactVocab convVocab
+    -- Grammar tip (compact)
     ++ renderGrammarTip convGrammarTip
-    -- Follow-up suggestion
-    ++ renderFollowUp convFollowUp
 
--- | Render inline corrections (gentle feedback in conversation)
-renderInlineCorrections :: Maybe [Correction] -> [Widget Name]
-renderInlineCorrections Nothing = []
-renderInlineCorrections (Just []) = []
-renderInlineCorrections (Just corrs) =
-  [ txt " "
-  , padLeft (Pad 2) $ vBox
-      [ withAttr attrTimestamp $ txt "📝 Small corrections:"
-      , padLeft (Pad 2) $ vBox $ map renderMiniCorrection corrs
-      ]
-  ]
+-- | Render inline corrections, grouped by original→fixed pair
+renderInlineCorrections :: [Correction] -> [Widget Name]
+renderInlineCorrections [] = []
+renderInlineCorrections corrs =
+  [txt ""] ++  -- Single blank line
+  concatMap renderGroupedCorrection (groupCorrections corrs)
   where
-    renderMiniCorrection Correction{..} =
+    -- Group corrections by (original, fixed) pair, preserving order
+    groupCorrections :: [Correction] -> [((Text, Text), [Text])]
+    groupCorrections = foldr insertCorr []
+      where
+        insertCorr Correction{..} groups =
+          let key = (corrOriginal, corrFixed)
+          in case findAndUpdate key corrExplanation groups of
+            Just updated -> updated
+            Nothing -> groups ++ [(key, [corrExplanation])]
+
+        findAndUpdate _ _ [] = Nothing
+        findAndUpdate key expl ((k, expls):rest)
+          | k == key  = Just ((k, expls ++ [expl]) : rest)
+          | otherwise = ((k, expls) :) <$> findAndUpdate key expl rest
+
+    renderGroupedCorrection ((original, fixed), explanations) =
+      [ padLeft (Pad 2) $ hBox
+          [ withAttr attrError $ txt $ "✗ " <> original
+          , txt " → "
+          , withAttr attrSuccess $ txt fixed
+          , case explanations of
+              [single] -> withAttr attrTimestamp $ txt $ "  (" <> single <> ")"
+              _ -> emptyWidget
+          ]
+      ] ++ case explanations of
+        [_] -> []  -- Already shown inline
+        multiple -> map renderExplanation multiple
+
+    renderExplanation expl =
+      padLeft (Pad 4) $ withAttr attrTimestamp $ txt $ "· " <> expl
+
+-- | Render compact vocabulary (limit to 2 items, inline format)
+renderCompactVocab :: [VocabHighlight] -> [Widget Name]
+renderCompactVocab [] = []
+renderCompactVocab vocab =
+  let limited = take 2 vocab  -- Max 2 vocab items for conversation mode
+      vocabParts = map renderVocabInline limited
+  in [ txt ""  -- Single blank line
+     , padLeft (Pad 2) $ hBox $
+         [ withAttr attrTimestamp $ txt "Vocab: " ]
+         ++ intersperse (txt " · ") vocabParts
+     ]
+  where
+    renderVocabInline VocabHighlight{..} =
       hBox
-        [ withAttr attrError $ txt corrOriginal
-        , txt " → "
-        , withAttr attrSuccess $ txt corrFixed
-        , txt " "
-        , withAttr attrTimestamp $ txt $ "(" <> corrExplanation <> ")"
+        [ withAttr attrCardFront $ txt vhWord
+        , txt "="
+        , withAttr attrCardBack $ txt vhTranslation
         ]
 
--- | Render vocabulary highlights section
-renderVocabSection :: [VocabHighlight] -> [Widget Name]
-renderVocabSection [] = []
-renderVocabSection vocab =
-  [ txt " "
-  , padLeft (Pad 2) $ vBox
-      [ withAttr attrTimestamp $ txt "━━━ Vocabulary ━━━"
-      , padTop (Pad 1) $ vBox $ map renderVocabItem vocab
-      ]
-  ]
-
-renderVocabItem :: VocabHighlight -> Widget Name
-renderVocabItem VocabHighlight{..} =
-  hBox $
-    [ withAttr attrCardFront $ txt vhWord
-    , txt " = "
-    , withAttr attrCardBack $ txt vhTranslation
-    ]
-    ++ maybe [] (\pos -> [txt $ " (" <> pos <> ")"]) vhPartOfSpeech
-    ++ maybe [] (\g -> [withAttr attrTimestamp $ txt $ " [" <> g <> "]"]) vhGender
-
--- | Render grammar tip
+-- | Render grammar tip (compact, single line)
 renderGrammarTip :: Maybe Text -> [Widget Name]
 renderGrammarTip Nothing = []
 renderGrammarTip (Just tip) =
-  [ txt " "
-  , padLeft (Pad 2) $ hBox
-      [ withAttr attrStatusModeActive $ txt "💡 "
-      , withAttr attrSystemMessage $ txtWrapWords tip
+  [ padLeft (Pad 2) $ hBox
+      [ withAttr attrTimestamp $ txt "Tip: "
+      , withAttr attrSystemMessage $ txt tip
       ]
   ]
 
--- | Render follow-up suggestion
-renderFollowUp :: Maybe Text -> [Widget Name]
-renderFollowUp Nothing = []
-renderFollowUp (Just q) =
-  [ txt " "
-  , padLeft (Pad 2) $ hBox
-      [ withAttr attrTimestamp $ txt "Try asking: "
-      , withAttr attrPlaceholder $ txt q
-      ]
-  ]
+-- | Intersperse separator between list elements
+intersperse :: a -> [a] -> [a]
+intersperse _ []     = []
+intersperse _ [x]    = [x]
+intersperse sep (x:xs) = x : sep : intersperse sep xs
 
 -- ════════════════════════════════════════════════════════════════
 -- CORRECTION MODE
@@ -161,28 +166,35 @@ renderPerfectScore :: Maybe Text -> [Widget Name]
 renderPerfectScore mEnc =
   [ padLeft (Pad 2) $ withAttr attrSuccess $ txt "✓ Perfect! No corrections needed."
   ]
-  ++ maybe [] (\enc -> [padLeft (Pad 2) $ withAttr attrSystemMessage $ txt enc]) mEnc
+  ++ maybe [] (\enc -> [txt " ", padLeft (Pad 2) $ withAttr attrSystemMessage $ txt enc]) mEnc
 
 -- | Render corrections
 renderCorrections :: Text -> Text -> [Correction] -> Maybe Text -> Maybe Text -> [Widget Name]
 renderCorrections original corrected corrections mEnc mNote =
-  [ withAttr attrTitle $ txt "Original:"
+  [ withAttr attrSectionHeader $ txt "Original:"
   , padLeft (Pad 2) $ withAttr attrError $ txtWrapWords original
   , txt " "
-  , withAttr attrTitle $ txt "Corrected:"
+  , withAttr attrSectionHeader $ txt "Corrected:"
   , padLeft (Pad 2) $ withAttr attrSuccess $ txtWrapWords corrected
   ]
   ++ (if null corrections then [] else
       [ txt " "
-      , withAttr attrTitle $ txt "Changes:"
+      , withAttr attrSectionDivider $ txt "─────────────────"
+      , txt " "
+      , withAttr attrChangesSection $ txt "Detailed Changes:"
+      , txt " "
       , padLeft (Pad 2) $ vBox $ map renderCorrectionItem corrections
       ])
   ++ maybe [] (\note ->
       [ txt " "
+      , withAttr attrSectionDivider $ txt "─────────────────"
+      , txt " "
       , padLeft (Pad 2) $ withAttr attrTimestamp $ txtWrapWords note
       ]) mNote
   ++ maybe [] (\enc ->
       [ txt " "
+      , withAttr attrSectionDivider $ txt "─────────────────"
+      , txt " "
       , padLeft (Pad 2) $ withAttr attrSystemMessage $ txt enc
       ]) mEnc
 
@@ -230,20 +242,21 @@ renderTranslation TranslationResponse{..} =
     , txt " "
     -- Source
     , hBox
-        [ withAttr attrTimestamp $ txt $ trSourceLang <> ": "
+        [ withAttr attrSectionHeader $ txt $ trSourceLang <> ": "
         ]
     , padLeft (Pad 2) $ txtWrapWords trSourceText
     , txt " "
     -- Target
     , hBox
-        [ withAttr attrTimestamp $ txt $ trTargetLang <> ": "
+        [ withAttr attrSectionHeader $ txt $ trTargetLang <> ": "
         , maybe emptyWidget renderFormality trFormality
         ]
     , padLeft (Pad 2) $ withAttr attrSuccess $ txtWrapWords trTargetText
     ]
     -- Literal meaning (if different)
     ++ maybe [] (\lit ->
-        [ padLeft (Pad 2) $ hBox
+        [ txt " "
+        , padLeft (Pad 2) $ hBox
             [ withAttr attrTimestamp $ txt "(Literally: "
             , txt lit
             , txt ")"
@@ -268,7 +281,8 @@ renderAlternatives :: [Text] -> [Widget Name]
 renderAlternatives [] = []
 renderAlternatives alts =
   [ txt " "
-  , withAttr attrTitle $ txt "Alternatives:"
+  , withAttr attrSectionHeader $ txt "Alternatives:"
+  , txt " "
   , padLeft (Pad 2) $ vBox $ map (\a -> txt $ "• " <> a) alts
   ]
 
@@ -277,7 +291,10 @@ renderTranslationNotes :: [TranslationNote] -> [Widget Name]
 renderTranslationNotes [] = []
 renderTranslationNotes notes =
   [ txt " "
-  , withAttr attrTitle $ txt "Notes:"
+  , withAttr attrSectionDivider $ txt "─────────────────"
+  , txt " "
+  , withAttr attrSectionHeader $ txt "Notes:"
+  , txt " "
   , padLeft (Pad 2) $ vBox $ map renderNote notes
   ]
   where
@@ -289,7 +306,7 @@ renderTranslationNotes notes =
             , txtWrapWords tnExplanation
             ]
         ]
-        ++ maybe [] (\c -> [padLeft (Pad 2) $ withAttr attrTimestamp $ txt $ "Cultural: " <> c]) tnCultural
+        ++ maybe [] (\c -> [txt " ", padLeft (Pad 2) $ withAttr attrTimestamp $ txt $ "Cultural: " <> c]) tnCultural
 
 -- ════════════════════════════════════════════════════════════════
 -- CARD GENERATION MODE
@@ -302,16 +319,17 @@ renderCardPreview CardResponse{..} =
     [ withAttr attrAssistantLabel $ txt "FLASHCARD GENERATED"
     , txt " "
     -- Front
-    , withAttr attrTitle $ txt "Front:"
+    , withAttr attrSectionHeader $ txt "Front:"
     , padLeft (Pad 2) $ withAttr attrCardFront $ txt cardRespFront
     , txt " "
     -- Back
-    , withAttr attrTitle $ txt "Back:"
+    , withAttr attrSectionHeader $ txt "Back:"
     , padLeft (Pad 2) $ withAttr attrCardBack $ txtWrapWords cardRespBack
     ]
     -- Pronunciation
     ++ maybe [] (\p ->
-        [ padLeft (Pad 2) $ hBox
+        [ txt " "
+        , padLeft (Pad 2) $ hBox
             [ withAttr attrTimestamp $ txt "🔊 "
             , txt p
             ]
@@ -319,15 +337,19 @@ renderCardPreview CardResponse{..} =
     -- Example
     ++ maybe [] (\ex ->
         [ txt " "
-        , withAttr attrTitle $ txt "Example:"
+        , withAttr attrSectionDivider $ txt "─────────────────"
+        , txt " "
+        , withAttr attrSectionHeader $ txt "Example:"
+        , txt " "
         , padLeft (Pad 2) $ txt ex
         ]
-        ++ maybe [] (\trans -> [padLeft (Pad 2) $ withAttr attrTimestamp $ txt $ "(" <> trans <> ")"]) cardRespExampleTrans
+        ++ maybe [] (\trans -> [txt " ", padLeft (Pad 2) $ withAttr attrTimestamp $ txt $ "(" <> trans <> ")"]) cardRespExampleTrans
         ) cardRespExample
     -- Notes
     ++ maybe [] (\n ->
         [ txt " "
-        , withAttr attrTitle $ txt "Notes:"
+        , withAttr attrSectionHeader $ txt "Notes:"
+        , txt " "
         , padLeft (Pad 2) $ withAttr attrTimestamp $ txtWrapWords n
         ]) cardRespNotes
     -- Mnemonic
@@ -341,6 +363,8 @@ renderCardPreview CardResponse{..} =
     -- Related words
     ++ (if null cardRespRelated then [] else
         [ txt " "
+        , withAttr attrSectionDivider $ txt "─────────────────"
+        , txt " "
         , hBox
             [ withAttr attrTimestamp $ txt "Related: "
             , txt $ T.intercalate ", " cardRespRelated

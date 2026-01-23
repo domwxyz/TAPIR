@@ -14,8 +14,8 @@ module Tapir.UI.Chat
     renderChat
   , renderChatHistory
   , renderMessage
-  , renderStreamingMessage
-  
+  , renderThinkingIndicator
+
     -- * Helpers
   , formatTimestamp
   , roleLabel
@@ -24,13 +24,11 @@ module Tapir.UI.Chat
 import Brick
 import Brick.Widgets.Center (hCenter)
 import Data.Text (Text)
-import Data.Maybe (listToMaybe, fromMaybe)
 import qualified Data.Text as T
 import Data.Time (UTCTime, formatTime, defaultTimeLocale)
 import Lens.Micro ((^.))
 
 import Tapir.Types (Role(..), Role, Message(..), messageRole)
-import Tapir.Types.Response (StructuredResponse(..))
 import Tapir.UI.Types
 import Tapir.UI.Attrs
 import Tapir.UI.Structured (renderStructuredResponse)
@@ -100,32 +98,46 @@ renderChatHistory :: AppState -> Widget Name
 renderChatHistory st =
   let messages = _asMessages st
       pendingStructured = _asPendingStructured st
-      
-      -- Render all messages except possibly last one
-      (messagesToRender, lastMessage) = 
-        case (listToMaybe messages, pendingStructured) of
-          (Just lastMsg, Just struct) 
-            | messageRole lastMsg == Assistant -> 
-              (init messages, Just struct)
+
+      -- Check if the last message should be rendered as structured
+      -- (when we have pendingStructured and last message is from Assistant)
+      (messagesToRender, lastStructured) =
+        case (safeLast messages, pendingStructured) of
+          (Just lastMsg, Just struct)
+            | messageRole lastMsg == Assistant ->
+              (safeInit messages, Just struct)
           _ -> (messages, Nothing)
-      
+
       messageWidgets = map renderMessage messagesToRender
-      
-      -- Last message might be structured
-      lastWidget = case lastMessage of
+
+      -- Last message rendered as structured (with colors/sections)
+      lastWidget = case lastStructured of
         Just structured -> renderStructuredResponse structured
         Nothing -> emptyWidget
-      
-      streamingWidget = case _asRequestState st of
-        Streaming -> [renderStreamingMessage (_asStreamingText st)]
-        Requesting -> [renderRequestingIndicator]
-        _ -> []  
-  in if null messages && null streamingWidget && isNothing lastMessage
+
+      -- Show "Thinking..." indicator while waiting for response
+      thinkingWidget = case _asRequestState st of
+        Requesting -> [renderThinkingIndicator]
+        _ -> []
+
+  in if null messages && null thinkingWidget && isNothing lastStructured
      then renderEmptyChat
-     else vBox (messageWidgets ++ [lastWidget] ++ streamingWidget)
+     else vBox (messageWidgets ++ [lastWidget] ++ thinkingWidget)
   where
     isNothing Nothing = True
-    isNothing _      = False
+    isNothing _       = False
+
+    -- Safe last element
+    safeLast :: [a] -> Maybe a
+    safeLast []     = Nothing
+    safeLast [x]    = Just x
+    safeLast (_:xs) = safeLast xs
+
+    -- Safe init (all but last)
+    safeInit :: [a] -> [a]
+    safeInit []     = []
+    safeInit [_]    = []
+    safeInit (x:xs) = x : safeInit xs
 
 -- ════════════════════════════════════════════════════════════════
 -- MESSAGE RENDERING
@@ -149,26 +161,9 @@ renderMessage Message{..} =
          wrapText messageContent
        ]
 
--- | Render streaming message in progress
-renderStreamingMessage :: Text -> Widget Name
-renderStreamingMessage content =
-  padBottom (Pad 1) $
-  vBox
-    [ hBox
-        [ withAttr attrAssistantLabel $ txt "TAPIR"
-        , txt " "
-        , withAttr attrStreaming $ txt "[streaming...]"
-        ]
-    , padLeft (Pad 2) $
-      hBox
-        [ withAttr attrAssistantMessage $ wrapText content
-        , withAttr attrStreaming $ txt "▌"  -- Cursor
-        ]
-    ]
-
--- | Render requesting indicator (waiting for response)
-renderRequestingIndicator :: Widget Name
-renderRequestingIndicator =
+-- | Render "Thinking..." indicator while waiting for response
+renderThinkingIndicator :: Widget Name
+renderThinkingIndicator =
   padBottom (Pad 1) $
   vBox
     [ hBox

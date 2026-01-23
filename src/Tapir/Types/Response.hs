@@ -79,31 +79,27 @@ responseToText = \case
 data ConversationResponse = ConversationResponse
   { convReply       :: !Text
     -- ^ The main conversational reply in target language
+  , convCorrections :: ![Correction]
+    -- ^ Corrections for any errors in learner's message (empty if perfect)
   , convVocab       :: ![VocabHighlight]
-    -- ^ 2-3 vocabulary items worth learning from this exchange
+    -- ^ 1-2 vocabulary items worth learning from this exchange
   , convGrammarTip  :: !(Maybe Text)
     -- ^ Brief grammar note if relevant to the conversation
-  , convFollowUp    :: !(Maybe Text)
-    -- ^ Suggested follow-up question to continue conversation
-  , convCorrections :: !(Maybe [Correction])
-    -- ^ Inline corrections if user made errors (gentle feedback)
   } deriving (Eq, Show, Generic)
 
 instance FromJSON ConversationResponse where
   parseJSON = withObject "ConversationResponse" $ \v -> ConversationResponse
     <$> v .:  "reply"
+    <*> v .:? "corrections" .!= []
     <*> v .:? "vocab_highlights" .!= []
     <*> v .:? "grammar_tip"
-    <*> v .:? "follow_up"
-    <*> v .:? "corrections"
 
 instance ToJSON ConversationResponse where
   toJSON ConversationResponse{..} = object
     [ "reply"            .= convReply
+    , "corrections"      .= convCorrections
     , "vocab_highlights" .= convVocab
     , "grammar_tip"      .= convGrammarTip
-    , "follow_up"        .= convFollowUp
-    , "corrections"      .= convCorrections
     ]
 
 -- | A vocabulary item highlighted from the conversation
