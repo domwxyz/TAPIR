@@ -2,19 +2,6 @@
 
 **Language-agnostic terminal-based language learning assistant**
 
-## Status
-
-**Complete** (Phase 6/6) - January 22, 2026
-
-All planned features implemented and functional:
-- Core TUI with four learning modes
-- LLM streaming with OpenRouter
-- SQLite database persistence
-- Full session management
-- Settings modal with level cycling and prompt preview
-- Card generation with robust JSON parsing
-- Anki integration via AnkiConnect
-
 ## What is TAPIR?
 
 A keyboard-driven TUI (Terminal User Interface) for language learning with:
@@ -40,14 +27,13 @@ A keyboard-driven TUI (Terminal User Interface) for language learning with:
 - **GHC** 9.6.3+ (tested with 9.8.2)
 - **Cabal** 3.10+
 - **OpenRouter API key** (or other LLM provider)
-- **Windows**: Requires Windows Terminal, PowerShell, or Command Prompt (not Git Bash/mintty)
 - **Anki** (optional): For flashcard integration, requires [AnkiConnect](https://ankiweb.net/shared/info/2055492159) plugin
 
 ## Quick Start
 
 ```bash
 # Clone the repository
-git clone <your-repo-url>
+git clone https://github.com/domwxyz/TAPIR.git
 cd TAPIR
 
 # Build the project
@@ -57,7 +43,7 @@ cabal build
 # Run tests
 cabal test
 
-# Run the application (use Windows Terminal/PowerShell on Windows)
+# Run the application
 cabal run tapir
 ```
 
@@ -70,30 +56,9 @@ cabal run tapir
    mkdir -p ~/.config/tapir/languages
    ```
 
-2. Create `~/.config/tapir/config.yaml`:
-   ```yaml
-   active_language: spanish
-
-   provider:
-     type: openrouter
-     api_key: "your-openrouter-api-key"
-     model: "z-ai/glm-4.7"
-     temperature: 0.7
-     max_tokens: 2000
-     stream: true
-
-   ui:
-     theme: default
-     chat:
-       show_timestamps: true
-
-   database:
-     path: "~/.local/share/tapir/tapir.db"
-
-   anki:
-     enabled: true
-     host: "localhost"
-     port: 8765
+2. Copy `./config/config.yaml` to `~/.config/tapir/config.yaml`:
+   ```bash
+   cp config/config.yaml ~/.config/tapir/
    ```
 
 3. Copy the Spanish language module:
@@ -101,7 +66,7 @@ cabal run tapir
    cp languages/spanish.yaml ~/.config/tapir/languages/
    ```
 
-4. Set your API key (alternative to config file):
+4. Set your API key (config file or environment variable):
    ```bash
    export OPENROUTER_API_KEY="sk-or-v1-..."
    ```
@@ -170,50 +135,6 @@ TAPIR/
 └── impl docs/             # Implementation specifications
 ```
 
-## Implementation Progress
-
-### Phase 1: Foundation
-- [x] Project scaffolding
-- [x] Type system (Mode, Language, Provider, Config)
-- [x] YAML configuration loading
-- [x] Prompt interpolation
-- [x] Spanish language module
-
-### Phase 2: Core Types & Database
-- [x] Complete domain types (Message, Session, Card)
-- [x] SQLite schema and migrations
-- [x] Repository pattern for CRUD operations
-- [x] Database tests
-
-### Phase 3: LLM Client
-- [x] Abstract LLM client interface
-- [x] OpenRouter implementation
-- [x] SSE streaming support
-- [x] Error handling and rate limiting
-
-### Phase 4: Basic TUI
-- [x] Brick application structure
-- [x] Chat history viewport
-- [x] Multi-line editor
-- [x] Status bar with mode tabs
-- [x] Modal dialogs (Help, Settings, Sessions)
-- [x] Keyboard navigation
-
-### Phase 5: Integration
-- [x] Wire LLM client to event loop
-- [x] Async streaming via BChan
-- [x] Message persistence to database
-- [x] Session management (create, list, load, delete)
-- [x] System prompt injection per mode
-- [x] Text wrapping with dynamic width
-
-### Phase 6: Features & Polish
-- [x] Full settings modal functionality (level cycling, prompt preview)
-- [x] Card generation mode with robust JSON parsing
-- [x] Anki integration (connection check, note push)
-- [x] UI polish (compact layout, dark theme)
-- [x] Error display (error modal, status bar notifications)
-
 ## Development
 
 ```bash
@@ -250,22 +171,12 @@ TAPIR follows a clean architecture with:
 
 ## Documentation
 
-See `impl docs/` for complete technical specifications:
-
-- `TAPIR_impl_Specification.md` - Complete architecture and design
-- `TAPIR_impl_Addendum.md` - Build config, schemas, API specs
-- `TAPIR_impl_Checklist.md` - Implementation roadmap
-- `TAPIR_Scaffolding_Guide.md` - Project structure guide
-
 For AI agents working on this codebase, see:
 
 - `CLAUDE.md` - Development guide and current state
 - `AGENTS.md` - Comprehensive AI agent reference
 
 ## Troubleshooting
-
-### "GetConsoleScreenBufferInfo: invalid argument"
-Running in Git Bash/mintty on Windows. Use Windows Terminal or PowerShell.
 
 ### "API key not configured"
 Set `OPENROUTER_API_KEY` environment variable or add `api_key` to config.yaml.
@@ -284,4 +195,4 @@ MIT License - See LICENSE file for details
 
 **Project Status**: Complete and Functional
 **Last Updated**: January 22, 2026
-**Phase**: 6/6 Complete
+
