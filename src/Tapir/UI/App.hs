@@ -385,10 +385,6 @@ handleMainEvent ev = case ev of
   -- Mode switching
   EvKey (KChar '\t') [] -> cycleMode 1
   EvKey KBackTab []     -> cycleMode (-1)
-  EvKey (KChar '1') []  -> asCurrentMode .= Conversation
-  EvKey (KChar '2') []  -> asCurrentMode .= Correction
-  EvKey (KChar '3') []  -> asCurrentMode .= Translation
-  EvKey (KChar '4') []  -> asCurrentMode .= CardGeneration
 
   -- New session
   EvKey (KChar 'n') [MCtrl] -> do

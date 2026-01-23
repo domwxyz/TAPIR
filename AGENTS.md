@@ -705,9 +705,8 @@ data TapirEvent
 | `Ctrl+C` | Cancel request / Quit |
 | `F1` | Help modal |
 | `F2` | Settings modal |
-| **Navigation** | |
+ | **Navigation** | |
 | `Tab` / `Shift+Tab` | Cycle modes (Chat/Correct/Translate/Card) |
-| `1` / `2` / `3` / `4` | Jump to specific mode |
 | `PageUp` / `PageDown` | Scroll history |
 | `Enter` | Send message |
 | **Modal Navigation** | |

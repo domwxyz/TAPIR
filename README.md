@@ -85,9 +85,8 @@ cabal run tapir
 | `Ctrl+C` | Cancel request / Quit |
 | `F1` | Help |
 | `F2` | Settings |
-| | **Modes** | |
+ | | **Modes** | |
 | `Tab` / `Shift+Tab` | Next / Previous mode |
-| `1` / `2` / `3` / `4` | Jump to Chat/Correct/Translate/Card |
 | `PageUp` / `PageDown` | Scroll history |
 | `Enter` | Send message |
 | | **Modal Navigation** | |
@@ -110,17 +109,17 @@ cabal run tapir
 
 ### Modes
 
-1. **Chat** (1) - Free conversation practice in your target language with inline corrections and vocabulary highlights
-2. **Correct** (2) - Grammar correction with detailed explanations, categories, and severity levels
-3. **Translate** (3) - Bidirectional translation between languages with notes on idioms, alternatives, and formality
-4. **Card** (4) - Generate Anki flashcards from vocabulary with examples, pronunciation, mnemonics, and related words
+1. **Chat** - Free conversation practice in your target language with inline corrections and vocabulary highlights
+2. **Correct** - Grammar correction with detailed explanations, categories, and severity levels
+3. **Translate** - Bidirectional translation between languages with notes on idioms, alternatives, and formality
+4. **Card** - Generate Anki flashcards from vocabulary with examples, pronunciation, mnemonics, and related words
 
 Each mode has:
 - A dedicated system prompt
 - A specific tool definition that ensures structured JSON responses
 - Custom rendering that highlights different sections appropriately
 
-Press `Tab` to cycle through modes, or use `1-4` to jump directly.
+Press `Tab` to cycle through modes.
 
 ### Structured Responses
 
