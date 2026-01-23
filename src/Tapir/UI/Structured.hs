@@ -22,7 +22,7 @@ module Tapir.UI.Structured
 import Brick
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Text.Wrap as Wrap
+import Lens.Micro ((^.))
 
 import Tapir.Types.Response
 import Tapir.UI.Types (Name)
@@ -50,9 +50,48 @@ renderRawText content =
     , padLeft (Pad 2) $ txtWrapWords content
     ]
 
--- | Simple text wrap for display in viewports
+-- | Wrap text to a given width, returning multiple lines
+-- Handles word boundaries and preserves existing newlines
+wrapTextToWidth :: Int -> Text -> [Text]
+wrapTextToWidth width content
+  | width <= 0 = [content]
+  | T.null content = [""]
+  | otherwise  = concatMap (wrapLine width) (T.lines content)
+  where
+    wrapLine :: Int -> Text -> [Text]
+    wrapLine w line
+      | T.length line <= w = [line]
+      | otherwise = wrapWords w (T.words line) [] ""
+
+    wrapWords :: Int -> [Text] -> [Text] -> Text -> [Text]
+    wrapWords _ [] acc current =
+      if T.null current then acc else acc ++ [current]
+    wrapWords w (word:rest) acc current
+      | T.null current =
+          if T.length word > w
+            then let (pre, post) = T.splitAt w word
+                 in wrapWords w (post:rest) (acc ++ [pre]) ""
+            else wrapWords w rest acc word
+      | T.length current + 1 + T.length word <= w =
+          wrapWords w rest acc (current <> " " <> word)
+      | otherwise =
+          if T.length word > w
+            then let (pre, post) = T.splitAt w word
+                 in wrapWords w (post:rest) (acc ++ [current, pre]) ""
+            else wrapWords w rest (acc ++ [current]) word
+
+-- | Helper to wrap text in a viewport-safe way using Widget monad
+-- Uses the available context width to wrap text dynamically
+wrapTextDynamic :: Text -> Widget Name
+wrapTextDynamic t = Widget Fixed Fixed $ do
+    ctx <- getContext
+    let availWidth = max 20 (ctx ^. availWidthL - 6)
+        wrapped = wrapTextToWidth availWidth t
+    render $ vBox $ map txt wrapped
+
+-- | Simple text wrap for display in viewports (fallback, uses dynamic)
 txtWrapWords :: Text -> Widget Name
-txtWrapWords t = vBox $ map txt $ T.lines $ Wrap.wrapText Wrap.defaultWrapSettings 80 t
+txtWrapWords = wrapTextDynamic
 
 -- ════════════════════════════════════════════════════════════════
 -- CONVERSATION MODE
@@ -77,7 +116,7 @@ renderConversation ConversationResponse{..} =
 renderInlineCorrections :: [Correction] -> [Widget Name]
 renderInlineCorrections [] = []
 renderInlineCorrections corrs =
-  [txt ""] ++  -- Single blank line
+  [txt " "] ++  -- Single blank line
   concatMap renderGroupedCorrection (groupCorrections corrs)
   where
     -- Group corrections by (original, fixed) pair, preserving order
@@ -117,7 +156,7 @@ renderCompactVocab [] = []
 renderCompactVocab vocab =
   let limited = take 2 vocab  -- Max 2 vocab items for conversation mode
       vocabParts = map renderVocabInline limited
-  in [ txt ""  -- Single blank line
+  in [ txt " "  -- Single blank line
      , padLeft (Pad 2) $ hBox $
          [ withAttr attrTimestamp $ txt "Vocab: " ]
          ++ intersperse (txt " · ") vocabParts
@@ -134,7 +173,8 @@ renderCompactVocab vocab =
 renderGrammarTip :: Maybe Text -> [Widget Name]
 renderGrammarTip Nothing = []
 renderGrammarTip (Just tip) =
-  [ padLeft (Pad 2) $ hBox
+  [ txt " "
+  , padLeft (Pad 2) $ hBox
       [ withAttr attrTimestamp $ txt "Tip: "
       , withAttr attrSystemMessage $ txt tip
       ]
@@ -166,7 +206,7 @@ renderPerfectScore :: Maybe Text -> [Widget Name]
 renderPerfectScore mEnc =
   [ padLeft (Pad 2) $ withAttr attrSuccess $ txt "✓ Perfect! No corrections needed."
   ]
-  ++ maybe [] (\enc -> [txt " ", padLeft (Pad 2) $ withAttr attrSystemMessage $ txt enc]) mEnc
+  ++ maybe [] (\enc -> [txt " ", padLeft (Pad 2) $ withAttr attrSystemMessage $ wrapTextDynamic enc]) mEnc
 
 -- | Render corrections
 renderCorrections :: Text -> Text -> [Correction] -> Maybe Text -> Maybe Text -> [Widget Name]
@@ -195,7 +235,7 @@ renderCorrections original corrected corrections mEnc mNote =
       [ txt " "
       , withAttr attrSectionDivider $ txt "─────────────────"
       , txt " "
-      , padLeft (Pad 2) $ withAttr attrSystemMessage $ txt enc
+      , padLeft (Pad 2) $ withAttr attrSystemMessage $ wrapTextDynamic enc
       ]) mEnc
 
 -- | Render a single correction item
@@ -283,7 +323,7 @@ renderAlternatives alts =
   [ txt " "
   , withAttr attrSectionHeader $ txt "Alternatives:"
   , txt " "
-  , padLeft (Pad 2) $ vBox $ map (\a -> txt $ "• " <> a) alts
+  , padLeft (Pad 2) $ vBox $ map (\a -> wrapTextDynamic $ "• " <> a) alts
   ]
 
 -- | Render translation notes
@@ -306,7 +346,7 @@ renderTranslationNotes notes =
             , txtWrapWords tnExplanation
             ]
         ]
-        ++ maybe [] (\c -> [txt " ", padLeft (Pad 2) $ withAttr attrTimestamp $ txt $ "Cultural: " <> c]) tnCultural
+        ++ maybe [] (\c -> [txt " ", padLeft (Pad 2) $ withAttr attrTimestamp $ wrapTextDynamic $ "Cultural: " <> c]) tnCultural
 
 -- ════════════════════════════════════════════════════════════════
 -- CARD GENERATION MODE
@@ -320,7 +360,7 @@ renderCardPreview CardResponse{..} =
     , txt " "
     -- Front
     , withAttr attrSectionHeader $ txt "Front:"
-    , padLeft (Pad 2) $ withAttr attrCardFront $ txt cardRespFront
+    , padLeft (Pad 2) $ withAttr attrCardFront $ wrapTextDynamic cardRespFront
     , txt " "
     -- Back
     , withAttr attrSectionHeader $ txt "Back:"
@@ -331,7 +371,7 @@ renderCardPreview CardResponse{..} =
         [ txt " "
         , padLeft (Pad 2) $ hBox
             [ withAttr attrTimestamp $ txt "🔊 "
-            , txt p
+            , wrapTextDynamic p
             ]
         ]) cardRespPronunciation
     -- Example
@@ -341,9 +381,9 @@ renderCardPreview CardResponse{..} =
         , txt " "
         , withAttr attrSectionHeader $ txt "Example:"
         , txt " "
-        , padLeft (Pad 2) $ txt ex
+        , padLeft (Pad 2) $ wrapTextDynamic ex
         ]
-        ++ maybe [] (\trans -> [txt " ", padLeft (Pad 2) $ withAttr attrTimestamp $ txt $ "(" <> trans <> ")"]) cardRespExampleTrans
+        ++ maybe [] (\trans -> [txt " ", padLeft (Pad 2) $ withAttr attrTimestamp $ wrapTextDynamic $ "(" <> trans <> ")"]) cardRespExampleTrans
         ) cardRespExample
     -- Notes
     ++ maybe [] (\n ->
