@@ -54,9 +54,12 @@ import Graphics.Vty.Input.Events
 import Lens.Micro.Mtl ((.=), (%=), use)
 
 import Tapir.Types
+import Tapir.Types.Response (StructuredResponse(..), responseToText, CardResponse(..))
 import Tapir.Config.Types (AppConfig(..), UIConfig(..))
 import Tapir.Config.Loader (getSystemPrompt, loadLanguageModule, loadConfig)
 import Tapir.Client.LLM
+import Tapir.Client.LLM.Request (buildRequestWithTools, buildRequest)
+import Tapir.Client.LLM.Response (parseResponse, ParsedResponse(..), ParseError(..))
 import Tapir.Client.Anki (mkAnkiClientWithConfig, checkConnection, addNote, AnkiNote(..), defaultNoteOptions)
 import Tapir.Db.Repository (createSession, saveMessage, saveCard, getRecentSessions, getSessionMessages, updateSessionTimestamp, markCardPushed, deleteSession)
 import Tapir.UI.Types
@@ -161,9 +164,10 @@ mkInitialState config langMod client conn chan = do
     , _asFocus          = FocusInput
     , _asModal          = NoModal
     , _asRequestState   = Idle
-    , _asStreamingText  = ""
-    , _asPendingCard    = Nothing
-    , _asAnkiConnected  = False  -- Will be updated by status poll
+     , _asStreamingText     = ""
+     , _asPendingCard       = Nothing
+     , _asPendingStructured = Nothing
+     , _asAnkiConnected    = False  -- Will be updated by status poll
     , _asLastError      = Nothing
     , _asConfig         = config
     , _asLangModule     = langMod
@@ -269,18 +273,64 @@ handleCustomEvent = \case
           msgId = messageId savedMsg
       -- Try to extract card from response
       case extractCardFromResponse langId sid msgId fullResponse now of
-        Just card -> do
+        Just card ->
           -- Save card to database
-          savedCardResult <- liftIO $ saveCard conn card
-          case savedCardResult of
-            Right savedCard -> do
-              asPendingCard .= Just savedCard
-              asModal .= CardPreviewModal savedCard
-            Left _ ->
-              -- Failed to save, still show preview
-              asPendingCard .= Just card
+          do
+            savedCardResult <- liftIO $ saveCard conn card
+            case savedCardResult of
+              Right savedCard -> do
+                asPendingCard .= Just savedCard
+                asModal .= CardPreviewModal savedCard
+              Left _ ->
+                -- Failed to save, still show preview
+                asPendingCard .= Just card
         Nothing -> pure ()  -- No card found in response
-
+  
+  EvStructuredResponse structured -> do
+    st <- get
+    let mode = _asCurrentMode st
+        sid = sessionId (_asSession st)
+        conn = _asDbConnection st
+    now <- liftIO getCurrentTime
+    
+    -- Convert to plain text for storage
+    let textContent = responseToText structured
+    
+    -- Create assistant message
+    let msg = Message
+          { messageId         = Nothing
+          , messageSessionId  = sid
+          , messageRole       = Assistant
+          , messageContent    = textContent
+          , messageMode       = mode
+          , messageTimestamp  = now
+          , messageModel      = Nothing
+          , messageProvider   = Just "OpenRouter"
+          , messageTokensUsed = Nothing
+          , messageError      = Nothing
+          }
+    
+    -- Save message
+    savedResult <- liftIO $ saveMessage conn msg
+    let savedMsg = either (const msg) id savedResult
+    
+    asMessages %= (++ [savedMsg])
+    asPendingStructured .= Just structured
+    asRequestState .= Idle
+    
+    -- Handle card extraction for card mode
+    case structured of
+      SRCard cardResp -> do
+        let langId = languageId (languageInfo (_asLangModule st))
+            card = cardResponseToAnkiCard cardResp sid langId now
+        asPendingCard .= Just card
+        asModal .= CardPreviewModal card
+      _ -> pure ()
+    
+    -- Scroll to bottom
+    let vp = viewportScroll NameHistoryViewport
+    vScrollToEnd vp
+  
   EvStreamError err -> do
     asRequestState .= RequestFailed err
     asLastError .= Just err
@@ -751,24 +801,34 @@ sendLLMRequest
 sendLLMRequest st chan client langMod userMsg = do
   let mode = messageMode userMsg
       messages = _asMessages st ++ [userMsg]
-
-  -- Build chat request
-  -- Convert our messages to LLM ChatMessages, with system prompt first
-  let systemPromptMsgs = case getSystemPrompt langMod mode of
-        Just prompt -> [ChatMessage "system" prompt]
-        Nothing    -> []
-      chatMsgs = systemPromptMsgs ++ map toClientMessage messages
-      req = defaultChatRequest (providerDefaultModel (_asConfig st)) chatMsgs
-
-  -- Stream callback
-  let onToken token = writeBChan chan (EvStreamChunk token)
-
-  -- Send streaming request
-  result <- llmStreamComplete client req onToken Nothing
-
-  case result of
-    Left err -> writeBChan chan (EvStreamError err)
-    Right sr -> writeBChan chan (EvStreamComplete (srFullResponse sr))
+      config = _asConfig st
+      
+      -- Decide: use tools for structured modes, stream for conversation
+      useTools = mode /= Conversation
+      
+  if useTools
+    then do
+      -- Build request with tools (non-streaming)
+      let req = buildRequestWithTools config langMod mode messages userMsg
+      
+      -- Non-streaming request
+      result <- llmComplete client req
+      case result of
+        Left err -> writeBChan chan (EvStreamError err)
+        Right resp -> 
+          case parseResponse mode resp of
+            ParsedStructured sr -> writeBChan chan (EvStructuredResponse sr)
+            ParsedRawText t -> writeBChan chan (EvStreamComplete t)
+            ParsedError pe -> writeBChan chan (EvStreamError (InternalError (peMessage pe)))
+    else do
+      -- Stream for conversation
+      let req = buildRequest config langMod mode messages userMsg
+          onToken token = writeBChan chan (EvStreamChunk token)
+      
+      result <- llmStreamComplete client req onToken Nothing
+      case result of
+        Left err -> writeBChan chan (EvStreamError err)
+        Right sr -> writeBChan chan (EvStreamComplete (srFullResponse sr))
   where
     toClientMessage :: Message -> ChatMessage
     toClientMessage msg = ChatMessage
@@ -890,8 +950,32 @@ extractCardFromResponse langId sessionId' sourceMsgId response now =
       , cardPushedAt    = Nothing
       , cardCreatedAt   = now
       }
-
+  
     -- Helper for Maybe alternation
     orElse :: Maybe a -> Maybe a -> Maybe a
     orElse Nothing b = b
     orElse a       _ = a
+
+-- | Convert CardResponse to AnkiCard (for structured response)
+cardResponseToAnkiCard :: CardResponse -> T.Text -> T.Text -> UTCTime -> AnkiCard
+cardResponseToAnkiCard cr sessionId' langId now = AnkiCard
+  { cardId          = Nothing
+  , cardSessionId   = sessionId'
+  , cardLanguageId  = langId
+  , cardFront       = cardRespFront cr
+  , cardBack        = formatCardBack (cardRespBack cr) (cardRespExample cr) (cardRespNotes cr)
+  , cardTags        = cardRespTags cr
+  , cardDeck        = langId <> "::TAPIR"
+  , cardSourceMsgId = Nothing
+  , cardAnkiNoteId  = Nothing
+  , cardPushedAt    = Nothing
+  , cardCreatedAt   = now
+  }
+  where
+    formatCardBack back mExample mNotes =
+      T.intercalate "\n\n" $ filter (not . T.null)
+        [ back
+        , maybe "" (\ex -> "Example: " <> ex) mExample
+        , maybe "" id mNotes
+        ]
+

@@ -15,7 +15,7 @@ module Tapir.UI.Chat
   , renderChatHistory
   , renderMessage
   , renderStreamingMessage
-
+  
     -- * Helpers
   , formatTimestamp
   , roleLabel
@@ -24,13 +24,16 @@ module Tapir.UI.Chat
 import Brick
 import Brick.Widgets.Center (hCenter)
 import Data.Text (Text)
+import Data.Maybe (listToMaybe, fromMaybe)
 import qualified Data.Text as T
 import Data.Time (UTCTime, formatTime, defaultTimeLocale)
 import Lens.Micro ((^.))
 
-import Tapir.Types
+import Tapir.Types (Role(..), Role, Message(..), messageRole)
+import Tapir.Types.Response (StructuredResponse(..))
 import Tapir.UI.Types
 import Tapir.UI.Attrs
+import Tapir.UI.Structured (renderStructuredResponse)
 
 -- | Wrap text to a given width, returning multiple lines
 -- Handles word boundaries and preserves existing newlines
@@ -96,14 +99,33 @@ renderChat st =
 renderChatHistory :: AppState -> Widget Name
 renderChatHistory st =
   let messages = _asMessages st
-      messageWidgets = map renderMessage messages
+      pendingStructured = _asPendingStructured st
+      
+      -- Render all messages except possibly last one
+      (messagesToRender, lastMessage) = 
+        case (listToMaybe messages, pendingStructured) of
+          (Just lastMsg, Just struct) 
+            | messageRole lastMsg == Assistant -> 
+              (init messages, Just struct)
+          _ -> (messages, Nothing)
+      
+      messageWidgets = map renderMessage messagesToRender
+      
+      -- Last message might be structured
+      lastWidget = case lastMessage of
+        Just structured -> renderStructuredResponse structured
+        Nothing -> emptyWidget
+      
       streamingWidget = case _asRequestState st of
         Streaming -> [renderStreamingMessage (_asStreamingText st)]
         Requesting -> [renderRequestingIndicator]
-        _ -> []
-  in if null messages && null streamingWidget
+        _ -> []  
+  in if null messages && null streamingWidget && isNothing lastMessage
      then renderEmptyChat
-     else vBox (messageWidgets ++ streamingWidget)
+     else vBox (messageWidgets ++ [lastWidget] ++ streamingWidget)
+  where
+    isNothing Nothing = True
+    isNothing _      = False
 
 -- ════════════════════════════════════════════════════════════════
 -- MESSAGE RENDERING

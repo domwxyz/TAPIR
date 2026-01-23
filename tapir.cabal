@@ -44,6 +44,7 @@ library
     Tapir.Types.Mode
     Tapir.Types.Language
     Tapir.Types.Provider
+    Tapir.Types.Response
     Tapir.Config.Types
     Tapir.Config.Loader
     Tapir.Config.Defaults
@@ -52,6 +53,9 @@ library
     Tapir.Client.LLM
     Tapir.Client.LLM.Types
     Tapir.Client.LLM.OpenRouter
+    Tapir.Client.LLM.Tools
+    Tapir.Client.LLM.Request
+    Tapir.Client.LLM.Response
     Tapir.Client.Anki
     Tapir.UI.Types
     Tapir.UI.Attrs
@@ -60,6 +64,7 @@ library
     Tapir.UI.Input
     Tapir.UI.StatusBar
     Tapir.UI.Modals
+    Tapir.UI.Structured
     Tapir.UI.App
   build-depends:
       base >=4.17 && <5
@@ -124,9 +129,14 @@ test-suite tapir-test
     , sqlite-simple
     , aeson
     , bytestring
+    , containers >=0.6 && <0.8
   build-tool-depends:
     hspec-discover:hspec-discover >=2.10 && <2.12
   other-modules:
     Tapir.Config.LoaderSpec
     Tapir.Db.RepositorySpec
     Tapir.Client.LLM.TypesSpec
+    Tapir.Types.ResponseSpec
+    Tapir.Client.LLM.ToolsSpec
+    Tapir.Client.LLM.RequestSpec
+    Tapir.Client.LLM.ResponseSpec

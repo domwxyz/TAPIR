@@ -43,6 +43,7 @@ module Tapir.UI.Types
   , asRequestState
   , asStreamingText
   , asPendingCard
+  , asPendingStructured
   , asAnkiConnected
   , asLastError
   , asConfig
@@ -67,6 +68,7 @@ import Database.SQLite.Simple (Connection)
 import Lens.Micro.TH (makeLenses)
 
 import Tapir.Types
+import Tapir.Types.Response (StructuredResponse)
 import Tapir.Config.Types (AppConfig)
 import Tapir.Client.LLM (LLMClient)
 import Tapir.Client.Anki (AnkiClient)
@@ -163,6 +165,7 @@ data TapirEvent
   = EvStreamChunk !Text             -- ^ Streaming token received
   | EvStreamComplete !Text          -- ^ Stream completed with full response
   | EvStreamError !TapirError       -- ^ Stream error occurred
+  | EvStructuredResponse !StructuredResponse  -- ^ Parsed structured response from tools
   | EvAnkiStatusUpdate !Bool        -- ^ Anki connection status changed
   | EvCardPushResult !(Either TapirError Integer)  -- ^ Card push result (note ID)
   | EvSessionsLoaded ![SessionSummary]  -- ^ Sessions loaded from DB
@@ -178,23 +181,24 @@ data TapirEvent
 
 -- | Main application state
 data AppState = AppState
-  { _asSession        :: !Session              -- ^ Current active session
-  , _asMessages       :: ![Message]            -- ^ Messages in current session
-  , _asInputEditor    :: !(Editor Text Name)   -- ^ Input text editor
-  , _asCurrentMode    :: !Mode                 -- ^ Current interaction mode
-  , _asFocus          :: !Focus                -- ^ Current focus area
-  , _asModal          :: !Modal                -- ^ Current modal state
-  , _asRequestState   :: !RequestState         -- ^ LLM request state
-  , _asStreamingText  :: !Text                 -- ^ Accumulated streaming text
-  , _asPendingCard    :: !(Maybe AnkiCard)     -- ^ Card pending push to Anki
-  , _asAnkiConnected  :: !Bool                 -- ^ Anki connection status
-  , _asLastError      :: !(Maybe TapirError)   -- ^ Last error for status display
-  , _asConfig         :: !AppConfig            -- ^ Main configuration
-  , _asLangModule     :: !LanguageModule       -- ^ Active language module
-  , _asLlmClient      :: !LLMClient            -- ^ LLM client instance
-  , _asAnkiClient     :: !AnkiClient           -- ^ Anki client instance
-  , _asDbConnection   :: !Connection           -- ^ Database connection
-  , _asEventChannel   :: !(BChan TapirEvent)   -- ^ Event channel for async ops
+  { _asSession            :: !Session              -- ^ Current active session
+  , _asMessages           :: ![Message]            -- ^ Messages in current session
+  , _asInputEditor        :: !(Editor Text Name)   -- ^ Input text editor
+  , _asCurrentMode       :: !Mode                 -- ^ Current interaction mode
+  , _asFocus             :: !Focus                -- ^ Current focus area
+  , _asModal             :: !Modal                -- ^ Current modal state
+  , _asRequestState      :: !RequestState         -- ^ LLM request state
+  , _asStreamingText     :: !Text                 -- ^ Accumulated streaming text
+  , _asPendingCard       :: !(Maybe AnkiCard)     -- ^ Card pending push to Anki
+  , _asPendingStructured  :: !(Maybe StructuredResponse)  -- ^ Parsed structured response
+  , _asAnkiConnected     :: !Bool                 -- ^ Anki connection status
+  , _asLastError         :: !(Maybe TapirError)   -- ^ Last error for status display
+  , _asConfig            :: !AppConfig            -- ^ Main configuration
+  , _asLangModule        :: !LanguageModule       -- ^ Active language module
+  , _asLlmClient         :: !LLMClient            -- ^ LLM client instance
+  , _asAnkiClient        :: !AnkiClient           -- ^ Anki client instance
+  , _asDbConnection      :: !Connection           -- ^ Database connection
+  , _asEventChannel      :: !(BChan TapirEvent)   -- ^ Event channel for async ops
   }
 
 -- Generate lenses for AppState

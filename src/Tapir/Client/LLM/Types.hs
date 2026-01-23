@@ -26,6 +26,12 @@ module Tapir.Client.LLM.Types
   , StreamChunk(..)
   , StreamChoice(..)
   , StreamDelta(..)
+  , ToolCallDelta(..)
+  , FunctionCallDelta(..)
+
+    -- * Tool Call Types
+  , ToolCall(..)
+  , FunctionCall(..)
 
     -- * Error Types
   , APIErrorResponse(..)
@@ -35,6 +41,8 @@ module Tapir.Client.LLM.Types
 import Data.Aeson
 import Data.Text (Text)
 import GHC.Generics (Generic)
+
+import Tapir.Client.LLM.Tools (Tool, ToolChoice)
 
 -- ════════════════════════════════════════════════════════════════
 -- REQUEST TYPES
@@ -59,13 +67,15 @@ instance FromJSON ChatMessage where
 
 -- | Chat completion request
 data ChatRequest = ChatRequest
-  { crModel       :: !Text           -- ^ Model identifier (e.g., "z-ai/glm-4.7")
-  , crMessages    :: ![ChatMessage]  -- ^ Conversation history
-  , crStream      :: !Bool           -- ^ Enable streaming
-  , crTemperature :: !(Maybe Double) -- ^ Sampling temperature (0.0-2.0)
-  , crMaxTokens   :: !(Maybe Int)    -- ^ Maximum tokens to generate
-  , crTopP        :: !(Maybe Double) -- ^ Nucleus sampling parameter
-  , crStop        :: !(Maybe [Text]) -- ^ Stop sequences
+  { crModel       :: !Text              -- ^ Model identifier (e.g., "z-ai/glm-4.7")
+  , crMessages    :: ![ChatMessage]     -- ^ Conversation history
+  , crStream      :: !Bool               -- ^ Enable streaming
+  , crTemperature :: !(Maybe Double)     -- ^ Sampling temperature (0.0-2.0)
+  , crMaxTokens   :: !(Maybe Int)        -- ^ Maximum tokens to generate
+  , crTopP        :: !(Maybe Double)     -- ^ Nucleus sampling parameter
+  , crStop        :: !(Maybe [Text])      -- ^ Stop sequences
+  , crTools       :: !(Maybe [Tool])      -- ^ Tool definitions for function calling
+  , crToolChoice  :: !(Maybe ToolChoice)  -- ^ Tool selection mode
   } deriving (Eq, Show, Generic)
 
 instance ToJSON ChatRequest where
@@ -77,6 +87,8 @@ instance ToJSON ChatRequest where
     , "max_tokens"  .= crMaxTokens
     , "top_p"       .= crTopP
     , "stop"        .= crStop
+    , "tools"       .= crTools
+    , "tool_choice" .= crToolChoice
     ]
 
 -- | Default chat request with sensible defaults
@@ -89,6 +101,8 @@ defaultChatRequest model msgs = ChatRequest
   , crMaxTokens   = Just 2000
   , crTopP        = Nothing
   , crStop        = Nothing
+  , crTools       = Nothing
+  , crToolChoice  = Nothing
   }
 
 -- ════════════════════════════════════════════════════════════════
@@ -125,14 +139,16 @@ instance FromJSON Choice where
 
 -- | Response message
 data ResponseMessage = ResponseMessage
-  { rmRole    :: !Text
-  , rmContent :: !Text
+  { rmRole      :: !Text
+  , rmContent   :: !(Maybe Text)       -- ^ May be null when using tools
+  , rmToolCalls :: !(Maybe [ToolCall]) -- ^ Tool calls made
   } deriving (Eq, Show, Generic)
 
 instance FromJSON ResponseMessage where
   parseJSON = withObject "ResponseMessage" $ \v -> ResponseMessage
     <$> v .: "role"
-    <*> v .: "content"
+    <*> v .:? "content"
+    <*> v .:? "tool_calls"
 
 -- | Token usage statistics
 data Usage = Usage
@@ -179,14 +195,83 @@ instance FromJSON StreamChoice where
 
 -- | Streaming delta (partial content)
 data StreamDelta = StreamDelta
-  { deltaRole    :: !(Maybe Text)  -- ^ Present in first chunk
-  , deltaContent :: !(Maybe Text)  -- ^ Partial content
+  { deltaRole      :: !(Maybe Text)
+  , deltaContent   :: !(Maybe Text)
+  , deltaToolCalls :: !(Maybe [ToolCallDelta])  -- ^ Tool calls (may be partial)
   } deriving (Eq, Show, Generic)
 
 instance FromJSON StreamDelta where
   parseJSON = withObject "StreamDelta" $ \v -> StreamDelta
     <$> v .:? "role"
     <*> v .:? "content"
+    <*> v .:? "tool_calls"
+
+-- ════════════════════════════════════════════════════════════════
+-- TOOL CALL TYPES
+-- ════════════════════════════════════════════════════════════════
+
+-- | Tool call in a response (from the LLM)
+data ToolCall = ToolCall
+  { tcId       :: !Text           -- ^ Unique ID for this call
+  , tcType     :: !Text           -- ^ Always "function"
+  , tcFunction :: !FunctionCall   -- ^ The actual function call
+  } deriving (Eq, Show, Generic)
+
+instance FromJSON ToolCall where
+  parseJSON = withObject "ToolCall" $ \v -> ToolCall
+    <$> v .: "id"
+    <*> v .: "type"
+    <*> v .: "function"
+
+instance ToJSON ToolCall where
+  toJSON ToolCall{..} = object
+    [ "id"       .= tcId
+    , "type"     .= tcType
+    , "function" .= tcFunction
+    ]
+
+-- | Function call details
+data FunctionCall = FunctionCall
+  { fcName      :: !Text  -- ^ Name of the function called
+  , fcArguments :: !Text  -- ^ JSON string of arguments
+  } deriving (Eq, Show, Generic)
+
+instance FromJSON FunctionCall where
+  parseJSON = withObject "FunctionCall" $ \v -> FunctionCall
+    <$> v .: "name"
+    <*> v .: "arguments"
+
+instance ToJSON FunctionCall where
+  toJSON FunctionCall{..} = object
+    [ "name"      .= fcName
+    , "arguments" .= fcArguments
+    ]
+
+-- | Streaming tool call (may be partial)
+data ToolCallDelta = ToolCallDelta
+  { tcdIndex    :: !Int
+  , tcdId       :: !(Maybe Text)
+  , tcdType     :: !(Maybe Text)
+  , tcdFunction :: !(Maybe FunctionCallDelta)
+  } deriving (Eq, Show, Generic)
+
+instance FromJSON ToolCallDelta where
+  parseJSON = withObject "ToolCallDelta" $ \v -> ToolCallDelta
+    <$> v .: "index"
+    <*> v .:? "id"
+    <*> v .:? "type"
+    <*> v .:? "function"
+
+-- | Streaming function call (arguments come in chunks)
+data FunctionCallDelta = FunctionCallDelta
+  { fcdName      :: !(Maybe Text)  -- ^ Present in first chunk
+  , fcdArguments :: !(Maybe Text)  -- ^ Partial argument string
+  } deriving (Eq, Show, Generic)
+
+instance FromJSON FunctionCallDelta where
+  parseJSON = withObject "FunctionCallDelta" $ \v -> FunctionCallDelta
+    <$> v .:? "name"
+    <*> v .:? "arguments"
 
 -- ════════════════════════════════════════════════════════════════
 -- ERROR TYPES
