@@ -14,13 +14,14 @@
 - **Configuration**: YAML config loading from `~/.config/tapir/config.yaml`
 - **Language Modules**: Spanish module loads from `~/.config/tapir/languages/spanish.yaml`
 - **Database**: SQLite with full schema, repository pattern, tested, message persistence
-- **LLM Client**: OpenRouter integration with streaming support
+- **LLM Client**: OpenRouter integration with tool/function calling for structured responses
+- **Structured Responses**: Guaranteed JSON responses with mode-specific schemas
+- **Response Rendering**: Sectioned display for corrections, vocab, translation notes, card metadata
 - **TUI**: brick-based interface with chat, input, status bar, modals
-- **Streaming**: Real-time token display via BChan
 - **Mode Switching**: All four modes (Chat, Correct, Translate, Card)
 - **Session Management**: Create, list, load, delete sessions with message history
 - **Settings Modal**: Level cycling, prompt preview, language settings
-- **Card Generation**: Robust JSON parsing with markdown fence handling
+- **Card Generation**: Robust JSON parsing from tool calls
 - **Anki Integration**: Connection checking, note pushing via AnkiConnect
 - **Text Wrapping**: Dynamic width calculation for proper message display
 
@@ -41,7 +42,8 @@ TAPIR/
 │   ├── Types/                 # Domain types
 │   │   ├── Mode.hs           # Mode enum
 │   │   ├── Language.hs       # LanguageInfo, LanguageModule
-│   │   └── Provider.hs       # ProviderType, ProviderConfig
+│   │   ├── Provider.hs       # ProviderType, ProviderConfig
+│   │   └── Response.hs      # Structured response types
 │   ├── Config/
 │   │   ├── Types.hs          # AppConfig, UIConfig, etc.
 │   │   ├── Loader.hs         # YAML loading, prompt interpolation
@@ -49,7 +51,10 @@ TAPIR/
 │   ├── Client/
 │   │   ├── LLM.hs            # Abstract LLM interface
 │   │   ├── LLM/
-│   │   │   ├── Types.hs      # ChatMessage, ChatRequest, etc.
+│   │   │   ├── Types.hs      # ChatMessage, ChatRequest, ToolCall
+│   │   │   ├── Tools.hs      # Tool definitions
+│   │   │   ├── Request.hs    # Request building
+│   │   │   ├── Response.hs   # Response parsing
 │   │   │   └── OpenRouter.hs # OpenRouter implementation
 │   │   └── Anki.hs           # AnkiConnect client
 │   ├── Db/
@@ -63,7 +68,8 @@ TAPIR/
 │       ├── Chat.hs           # Chat history display
 │       ├── Input.hs          # Text editor widget
 │       ├── StatusBar.hs      # Mode tabs, status info
-│       └── Modals.hs         # Help, Settings, Sessions dialogs
+│       ├── Modals.hs         # Help, Settings, Sessions dialogs
+│       └── Structured.hs     # Structured response rendering
 ├── test/                      # Test suite
 └── languages/                 # Template language modules
 ```
@@ -165,9 +171,41 @@ cabal repl
 1. User input captured by brick
 2. Events dispatched to `handleEvent`
 3. LLM requests spawn async thread
-4. Streaming tokens sent via `BChan TapirEvent`
-5. `AppEvent` handler updates state
-6. brick re-renders UI
+4. Structured response received (via tool calls)
+5. `EvStructuredResponse` sent via `BChan`
+6. `AppEvent` handler updates state
+7. brick re-renders UI with `renderStructuredResponse`
+
+### Structured Response System
+
+TAPIR uses OpenAI-compatible tool/function calling to guarantee structured JSON:
+
+1. **Tool Definitions** (`Tapir.Client.LLM.Tools`):
+   - Four mode-specific tools: `send_conversation_reply`, `submit_correction`, `submit_translation`, `create_flashcard`
+   - Each tool has JSON Schema for parameters
+   - `tfStrict = True` enforces schema validation
+
+2. **Request Building** (`Tapir.Client.LLM.Request`):
+   - `buildRequestWithTools` adds tool definitions
+   - `tool_choice` forces specific tool usage
+   - `stream = False` (tool calls don't stream well)
+
+3. **Response Parsing** (`Tapir.Client.LLM.Response`):
+   - Parse `tool_calls` from LLM response
+   - Extract JSON arguments
+   - Parse into `StructuredResponse` sum type
+
+4. **Rendering** (`Tapir.UI.Structured`):
+   - Mode-specific rendering functions
+   - Sectioned display with colors
+   - Conversation: inline corrections, vocab highlights, grammar tips
+   - Correction: original/corrected, detailed corrections, encouragement
+   - Translation: source/target, alternatives, formality, notes
+   - Card: front/back, examples, pronunciation, mnemonics
+
+5. **Storage**:
+   - Only plain text stored to database (`responseToText`)
+   - Structured data is transient (`asPendingStructured`)
 
 ### Key Types
 
@@ -233,4 +271,4 @@ cabal test --test-option=--match="/Repository/"
 
 ---
 
-*Last Updated: January 22, 2026*
+*Last Updated: January 23, 2026*

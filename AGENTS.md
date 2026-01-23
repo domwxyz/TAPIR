@@ -26,6 +26,10 @@ cabal run tapir       # Run application
 | Database ops | `src/Tapir/Db/Repository.hs` |
 | LLM client | `src/Tapir/Client/LLM/OpenRouter.hs` |
 | Anki client | `src/Tapir/Client/Anki.hs` |
+| **Structured responses** | `src/Tapir/Types/Response.hs` |
+| **Tool definitions** | `src/Tapir/Client/LLM/Tools.hs` |
+| **Response parsing** | `src/Tapir/Client/LLM/Response.hs` |
+| **Response rendering** | `src/Tapir/UI/Structured.hs` |
 
 ---
 
@@ -47,6 +51,226 @@ TAPIR is a **language-agnostic terminal-based language learning assistant** buil
 3. **Purity where practical** - Side effects at edges
 4. **Keyboard-first UX** - Every action has a keybinding
 5. **Offline-capable** - Local history persists without network
+6. **Structured output** - Tool/function calling guarantees parseable responses
+
+---
+
+## Structured Response Architecture
+
+TAPIR uses OpenAI-compatible tool/function calling to guarantee structured JSON responses from LLMs. This replaces the previous streaming text approach with a non-streaming, structured approach that provides:
+
+- Guaranteed structure: LLM must call the specified function with valid JSON
+- Mode-specific schemas: Each mode has its own tool definition
+- Rich metadata: Responses include vocabulary, corrections, examples, notes, etc.
+- Fallback handling: Falls back to raw text if tool calls fail
+
+### Tool Definitions (`Tapir.Client.LLM.Tools`)
+
+Each mode has a dedicated tool that the LLM must call:
+
+| Mode | Tool Name | Purpose |
+|------|-----------|---------|
+| Conversation | `send_conversation_reply` | Reply with corrections, vocab highlights, grammar tips |
+| Correction | `submit_correction` | Original/corrected text, detailed corrections |
+| Translation | `submit_translation` | Translation with notes, alternatives, formality |
+| Card Generation | `create_flashcard` | Front/back, examples, pronunciation, mnemonics |
+
+**Tool Structure Example:**
+```haskell
+conversationTool = Tool "function" ToolFunction
+  { tfName = "send_conversation_reply"
+  , tfDescription = "Send a conversational reply..."
+  , tfStrict = True  -- Enforce schema validation
+  , tfParameters = object
+      [ "type" .= "object"
+      , "additionalProperties" .= False
+      , "properties" .= object
+          [ "reply" .= object [...]
+          , "corrections" .= object [...]
+          , "vocab_highlights" .= object [...]
+          , "grammar_tip" .= object [...]
+          ]
+      ]
+  }
+```
+
+### Response Types (`Tapir.Types.Response`)
+
+The `StructuredResponse` sum type encapsulates all mode-specific responses:
+
+```haskell
+data StructuredResponse
+  = SRConversation !ConversationResponse
+  | SRCorrection !CorrectionResponse
+  | SRTranslation !TranslationResponse
+  | SRCard !CardResponse
+  | SRRawText !Text  -- Fallback for unparseable responses
+```
+
+#### ConversationResponse
+```haskell
+data ConversationResponse = ConversationResponse
+  { convReply       :: !Text              -- Main reply
+  , convCorrections :: ![Correction]      -- Errors in user's message
+  , convVocab       :: ![VocabHighlight]  -- 1-2 vocabulary items
+  , convGrammarTip  :: !(Maybe Text)       -- Brief grammar note
+  }
+```
+
+#### CorrectionResponse
+```haskell
+data CorrectionResponse = CorrectionResponse
+  { crOriginal      :: !Text              -- Original text
+  , crCorrected     :: !Text              -- Corrected version
+  , crIsCorrect     :: !Bool              -- True if no errors
+  , crCorrections   :: ![Correction]      -- List of corrections
+  , crEncouragement :: !(Maybe Text)      -- "Great job!" message
+  , crOverallNote   :: !(Maybe Text)      -- General feedback
+  }
+
+data Correction = Correction
+  { corrOriginal    :: !Text
+  , corrFixed       :: !Text
+  , corrExplanation :: !Text
+  , corrCategory    :: !(Maybe CorrectionCategory)
+  , corrSeverity    :: !(Maybe Text)       -- "minor", "moderate", "significant"
+  }
+```
+
+#### TranslationResponse
+```haskell
+data TranslationResponse = TranslationResponse
+  { trSourceText    :: !Text              -- Original text
+  , trSourceLang    :: !Text              -- Source language
+  , trTargetText    :: !Text              -- Translation
+  , trTargetLang    :: !Text              -- Target language
+  , trNotes         :: ![TranslationNote]  -- Tricky phrases, idioms
+  , trAlternatives  :: ![Text]            -- Alternative translations
+  , trFormality     :: !(Maybe Formality)  -- formal, informal, neutral
+  , trLiteralMeaning :: !(Maybe Text)      -- Word-for-word translation
+  }
+```
+
+#### CardResponse
+```haskell
+data CardResponse = CardResponse
+  { cardRespFront        :: !Text           -- Target language
+  , cardRespBack         :: !Text           -- Native + context
+  , cardRespTags         :: ![Text]         -- Organization tags
+  , cardRespExample      :: !(Maybe Text)   -- Example sentence
+  , cardRespExampleTrans :: !(Maybe Text)   -- Example translation
+  , cardRespPronunciation :: !(Maybe Text)  -- IPA/phonetic
+  , cardRespAudio        :: !(Maybe Text)   -- Audio URL
+  , cardRespNotes        :: !(Maybe Text)   -- Usage notes
+  , cardRespRelated      :: ![Text]         -- Related words
+  , cardRespMnemonic     :: !(Maybe Text)   -- Memory aid
+  }
+```
+
+### Request Building (`Tapir.Client.LLM.Request`)
+
+Requests are built with tools and forced tool choice:
+
+```haskell
+buildRequestWithTools config langMod mode history currentMsg =
+  let tool = toolForMode mode
+      toolName = toolNameForMode mode
+      toolChoice = Just (ToolChoiceForced toolName)  -- Force tool use
+  in baseReq
+      { crTools = Just [tool]
+      , crToolChoice = toolChoice
+      , crStream = False  -- Tool calls don't stream
+      }
+```
+
+**Key Points:**
+- `rcUseTools = True`: Include tool definitions in request
+- `rcForceTools = True`: Use `ToolChoiceForced` to require specific tool
+- `rcStream = False`: Non-streaming for tool calls (tool JSON isn't streamed well)
+
+### Response Parsing (`Tapir.Client.LLM.Response`)
+
+Parse tool call arguments into structured types:
+
+```haskell
+parseResponse :: Mode -> ChatResponse -> ParsedResponse
+parseResponse mode resp =
+  case respChoices resp of
+    (choice:_) ->
+      let msg = choiceMessage choice
+      in case rmToolCalls msg of
+        Just (tc:_) -> parseToolCallResponse mode tc
+        _ -> ParsedRawText content  -- Fallback
+
+parseToolCallResponse :: Mode -> ToolCall -> ParsedResponse
+parseToolCallResponse mode tc =
+  let args = fcArguments (tcFunction tc)  -- JSON string
+  in case parseResponseForMode mode args of
+    Right structured -> ParsedStructured structured
+    Left err -> ParsedError ...
+```
+
+### Event Flow
+
+1. **User sends message** → `handleEvent (KChar '\RET')`
+2. **Build request** with tools → `buildRequestWithTools`
+3. **Send to LLM** (non-streaming) → `llmRequestComplete`
+4. **Receive response** with `tool_calls` array
+5. **Parse tool call** → `parseToolCallResponse`
+6. **Send event** → `EvStructuredResponse structured`
+7. **Handle in UI** → `handleCustomEvent (EvStructuredResponse ...)`
+8. **Save message** to database with plain text (`responseToText`)
+9. **Set pending structured** → `asPendingStructured .= Just structured`
+10. **Render** → `renderStructuredResponse` in viewport
+
+### Rendering (`Tapir.UI.Structured`)
+
+Each mode has dedicated rendering with sections, colors, and layout:
+
+#### Conversation Mode
+- Main reply highlighted as assistant message
+- Inline corrections shown as: `✗ original → fixed (explanation)`
+- Vocabulary displayed compactly: `Vocab: palabra=meaning · otro=other`
+- Grammar tip shown if present
+
+#### Correction Mode
+- Shows "Original:" and "Corrected:" sections
+- "Perfect!" message when `is_correct = true`
+- Detailed corrections with categories and severity:
+  ```
+  original → fixed [grammar] (moderate)
+      Explanation of why this was wrong...
+  ```
+- Encouragement and overall notes in separate sections
+
+#### Translation Mode
+- Source and target languages as section headers
+- Formality badge: `[formal]`, `[informal]`, or `[neutral]`
+- Literal meaning in parentheses when idiomatic
+- Alternatives and translation notes in separate sections
+
+#### Card Mode
+- Front and back prominently displayed
+- Pronunciation with 🔊 icon
+- Example with translation
+- Notes, mnemonic (💡), related words, tags in sections
+
+### Storage
+
+While structured responses are rendered in the UI, only plain text is stored:
+
+```haskell
+-- Extract plain text for database storage
+responseToText :: StructuredResponse -> Text
+responseToText = \case
+  SRConversation cr -> convReply cr
+  SRCorrection cr   -> crCorrected cr
+  SRTranslation tr  -> trTargetText tr
+  SRCard cr         -> cardRespFront cr <> " — " <> cardRespBack cr
+  SRRawText t       -> t
+```
+
+This keeps the database simple while preserving all functionality. The structured response is transient, stored only in `asPendingStructured` during the session.
 
 ---
 
@@ -84,7 +308,8 @@ TAPIR/
 │   ├── Types/
 │   │   ├── Mode.hs             # Mode enum (Conversation, Correction, Translation, CardGeneration)
 │   │   ├── Language.hs         # LanguageInfo, LanguageModule, LearnerLevel
-│   │   └── Provider.hs         # ProviderType, ProviderConfig
+│   │   ├── Provider.hs         # ProviderType, ProviderConfig
+│   │   └── Response.hs        # Structured response types for all modes
 │   ├── Config/
 │   │   ├── Types.hs            # AppConfig, UIConfig, DatabaseConfig
 │   │   ├── Loader.hs           # YAML loading, prompt interpolation
@@ -97,11 +322,15 @@ TAPIR/
 │   │   ├── Chat.hs             # Chat history viewport rendering
 │   │   ├── Input.hs            # Text editor widget
 │   │   ├── StatusBar.hs        # Mode tabs, status info
-│   │   └── Modals.hs           # All modal dialogs
+│   │   ├── Modals.hs           # All modal dialogs
+│   │   └── Structured.hs       # Structured response rendering
 │   ├── Client/
 │   │   ├── LLM.hs              # Abstract LLM client interface
 │   │   ├── LLM/
-│   │   │   ├── Types.hs        # ChatMessage, ChatRequest, StreamChunk
+│   │   │   ├── Types.hs        # ChatMessage, ChatRequest, StreamChunk, ToolCall
+│   │   │   ├── Tools.hs        # Tool definitions for structured output
+│   │   │   ├── Request.hs      # Request building with tools
+│   │   │   ├── Response.hs     # Response parsing from tool calls
 │   │   │   └── OpenRouter.hs   # OpenRouter implementation with SSE
 │   │   └── Anki.hs             # AnkiConnect client
 │   ├── Db/
@@ -447,6 +676,11 @@ data TapirEvent
 | Interpolate prompt | `interpolatePrompt` | `Tapir.Config.Loader` |
 | Create LLM client | `mkLLMClient` | `Tapir.Client.LLM` |
 | Send streaming request | `llmStreamComplete` | `Tapir.Client.LLM` |
+| **Build request with tools** | `buildRequestWithTools` | `Tapir.Client.LLM.Request` |
+| **Get tool for mode** | `toolForMode` | `Tapir.Client.LLM.Tools` |
+| **Parse LLM response** | `parseResponse` | `Tapir.Client.LLM.Response` |
+| **Parse response for mode** | `parseResponseForMode` | `Tapir.Types.Response` |
+| **Render structured response** | `renderStructuredResponse` | `Tapir.UI.Structured` |
 | Save message | `saveMessage` | `Tapir.Db.Repository` |
 | Get messages | `getMessagesBySession` | `Tapir.Db.Repository` |
 | Create session | `createSession` | `Tapir.Db.Repository` |
@@ -454,7 +688,7 @@ data TapirEvent
 | Delete session | `deleteSession` | `Tapir.Db.Repository` |
 | Check Anki | `checkAnkiConnection` | `Tapir.Client.Anki` |
 | Add Anki note | `addNote` | `Tapir.Client.Anki` |
-| Parse card JSON | `parseCardJson` | `Tapir.UI.App` |
+| Convert card response to Anki card | `cardResponseToAnkiCard` | `Tapir.UI.App` |
 
 ---
 
@@ -602,9 +836,24 @@ X-Title: TAPIR Language Learning Assistant
     {"role": "system", "content": "..."},
     {"role": "user", "content": "..."}
   ],
-  "stream": true,
+  "stream": false,
   "temperature": 0.7,
-  "max_tokens": 2000
+  "max_tokens": 2000,
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "send_conversation_reply",
+        "description": "Send a conversational reply...",
+        "parameters": { ... },
+        "strict": true
+      }
+    }
+  ],
+  "tool_choice": {
+    "type": "function",
+    "function": {"name": "send_conversation_reply"}
+  }
 }
 ```
 
@@ -759,4 +1008,4 @@ This guide provides everything needed to work with TAPIR:
 
 ---
 
-*Last Updated: January 22, 2026*
+*Last Updated: January 23, 2026*

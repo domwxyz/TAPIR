@@ -13,9 +13,10 @@ A keyboard-driven TUI (Terminal User Interface) for language learning with:
 
 ### Key Features
 
+- **Structured responses**: All responses use tool/function calling for guaranteed, parseable output
+- **Sectioned display**: Conversation corrections, vocabulary highlights, translation notes, and more are displayed in organized sections
 - **Language-agnostic design**: All language-specific logic lives in YAML configs
 - **Command menu**: Ctrl+P for quick access to all commands
-- **Streaming responses**: Real-time token display for natural interaction
 - **Local persistence**: SQLite stores your learning history
 - **Privacy-focused**: Works with OpenRouter, Anthropic, OpenAI, or local Ollama
 - **Full session management**: Create, list, load, delete sessions with message history
@@ -109,14 +110,28 @@ cabal run tapir
 
 ### Modes
 
-1. **Chat** (1) - Free conversation practice in your target language
-2. **Correct** (2) - Grammar correction with detailed explanations
-3. **Translate** (3) - Bidirectional translation between languages
-4. **Card** (4) - Generate Anki flashcards from vocabulary
+1. **Chat** (1) - Free conversation practice in your target language with inline corrections and vocabulary highlights
+2. **Correct** (2) - Grammar correction with detailed explanations, categories, and severity levels
+3. **Translate** (3) - Bidirectional translation between languages with notes on idioms, alternatives, and formality
+4. **Card** (4) - Generate Anki flashcards from vocabulary with examples, pronunciation, mnemonics, and related words
 
-Each mode has a dedicated system prompt that instructs the LLM how to respond appropriately.
+Each mode has:
+- A dedicated system prompt
+- A specific tool definition that ensures structured JSON responses
+- Custom rendering that highlights different sections appropriately
 
 Press `Tab` to cycle through modes, or use `1-4` to jump directly.
+
+### Structured Responses
+
+TAPIR uses OpenAI-compatible tool/function calling to guarantee structured responses from LLMs:
+
+- **Conversation Mode**: Includes inline corrections, vocabulary highlights (with parts of speech and gender), and grammar tips
+- **Correction Mode**: Shows original vs corrected text, categorized corrections with severity levels, and encouragement
+- **Translation Mode**: Displays source and target languages, alternatives, formality level, literal meanings, and cultural notes
+- **Card Mode**: Front/back with examples, pronunciation (IPA), mnemonics, related words, and usage notes
+
+All responses are parsed and rendered with colored sections for easy readability.
 
 ## Project Structure
 
@@ -193,5 +208,5 @@ MIT License - See LICENSE file for details
 ---
 
 **Project Status**: Complete and Functional
-**Last Updated**: January 22, 2026
+**Last Updated**: January 23, 2026
 
