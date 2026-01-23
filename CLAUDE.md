@@ -37,14 +37,11 @@
 TAPIR/
 ├── app/Main.hs                 # Entry point
 ├── src/Tapir/
-│   ├── Types.hs               # Re-exports all types
+│   ├── Types.hs               # Message, Session, AnkiCard, Role, TapirError (re-exports)
 │   ├── Types/                 # Domain types
-│   │   ├── Core.hs           # Mode, Role, TapirError
+│   │   ├── Mode.hs           # Mode enum
 │   │   ├── Language.hs       # LanguageInfo, LanguageModule
-│   │   ├── Provider.hs       # ProviderType, ProviderConfig
-│   │   ├── Message.hs        # Message type
-│   │   ├── Session.hs        # Session, SessionSummary
-│   │   └── Card.hs           # Card type for Anki
+│   │   └── Provider.hs       # ProviderType, ProviderConfig
 │   ├── Config/
 │   │   ├── Types.hs          # AppConfig, UIConfig, etc.
 │   │   ├── Loader.hs         # YAML loading, prompt interpolation
@@ -68,8 +65,7 @@ TAPIR/
 │       ├── StatusBar.hs      # Mode tabs, status info
 │       └── Modals.hs         # Help, Settings, Sessions dialogs
 ├── test/                      # Test suite
-├── languages/                 # Template language modules
-└── impl docs/                 # Original specifications
+└── languages/                 # Template language modules
 ```
 
 ---
@@ -229,12 +225,6 @@ cabal test --test-option=--match="/Repository/"
 ---
 
 ## Reference
-
-### Implementation Documents (in `impl docs/`)
-- `TAPIR_impl_Specification.md` - Full architecture spec
-- `TAPIR_impl_Addendum.md` - Build config, schemas, API details
-- `TAPIR_impl_Checklist.md` - Implementation roadmap
-- `TAPIR_Scaffolding_Guide.md` - Project structure
 
 ### External Resources
 - [brick documentation](https://github.com/jtdaugherty/brick)

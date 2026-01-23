@@ -131,8 +131,7 @@ TAPIR/
 │   ├── Db/                # Database layer
 │   └── Util/              # Utilities
 ├── test/                  # Test suite
-├── languages/             # Language module templates
-└── impl docs/             # Implementation specifications
+└── languages/             # Language module templates
 ```
 
 ## Development

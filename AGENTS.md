@@ -80,14 +80,11 @@ TAPIR/
 ├── app/
 │   └── Main.hs                 # Entry point, CLI parsing, initialization
 ├── src/Tapir/
-│   ├── Types.hs                # Re-exports all domain types
+│   ├── Types.hs                # Message, Session, AnkiCard, Role, TapirError (re-exports)
 │   ├── Types/
-│   │   ├── Core.hs             # Mode, Role, TapirError ADTs
+│   │   ├── Mode.hs             # Mode enum (Conversation, Correction, Translation, CardGeneration)
 │   │   ├── Language.hs         # LanguageInfo, LanguageModule, LearnerLevel
-│   │   ├── Provider.hs         # ProviderType, ProviderConfig
-│   │   ├── Message.hs          # Message type with all fields
-│   │   ├── Session.hs          # Session, SessionSummary
-│   │   └── Card.hs             # AnkiCard type
+│   │   └── Provider.hs         # ProviderType, ProviderConfig
 │   ├── Config/
 │   │   ├── Types.hs            # AppConfig, UIConfig, DatabaseConfig
 │   │   ├── Loader.hs           # YAML loading, prompt interpolation
@@ -119,12 +116,7 @@ TAPIR/
 │       └── Db/RepositorySpec.hs
 ├── languages/                  # Template language modules
 │   └── spanish.yaml            # Reference implementation
-├── impl docs/                  # Implementation specifications
-│   ├── TAPIR_impl_Specification.md
-│   ├── TAPIR_impl_Addendum.md
-│   ├── TAPIR_impl_Checklist.md
-│   └── TAPIR_Scaffolding_Guide.md
-├── CLAUDE.md                   # Development guide (this context)
+├── CLAUDE.md                   # Development guide
 ├── AGENTS.md                   # AI agent guide (this file)
 └── README.md                   # User-facing documentation
 ```
@@ -720,7 +712,7 @@ data: [DONE]
 
 ### Making Changes
 1. Read relevant source files to understand context
-2. Check impl docs for architectural guidance
+2. Check AGENTS.md and CLAUDE.md for architectural guidance
 3. Make changes following existing patterns
 4. Run `cabal build` to check for errors
 5. Run tests if applicable: `cabal test`
@@ -752,23 +744,6 @@ sqlite3 ~/.local/share/tapir/tapir.db "SELECT * FROM messages ORDER BY id DESC L
 
 ---
 
-## Reference Documentation
-
-The `impl docs/` directory contains comprehensive specifications:
-
-1. **TAPIR_impl_Specification.md** - Complete architecture and design
-2. **TAPIR_impl_Addendum.md** - Build config, schemas, API details, rate limiting
-3. **TAPIR_impl_Checklist.md** - Implementation roadmap and validation steps
-4. **TAPIR_Scaffolding_Guide.md** - Directory structure and file templates
-
-### When to Check Impl Docs
-- **Before implementing**: Review Specification for architecture
-- **When adding features**: Check Addendum for technical details
-- **When stuck**: Look at Checklist for validation steps
-- **When creating files**: Use Scaffolding Guide for correct structure
-
----
-
 ## Summary for Agents
 
 This guide provides everything needed to work with TAPIR:
@@ -781,8 +756,6 @@ This guide provides everything needed to work with TAPIR:
 6. **APIs** - OpenRouter and AnkiConnect integration
 7. **Troubleshooting** - Common issues and solutions
 8. **Testing** - Running and writing tests
-
-For detailed specifications, refer to `impl docs/` directory.
 
 ---
 
