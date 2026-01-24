@@ -436,7 +436,7 @@ handleMainEvent ev = case ev of
       Just card -> asModal .= CardPreviewModal card
       Nothing   -> pure ()
 
-  -- Focus switching
+  -- Focus switching and scrolling
   EvKey KPageUp [] -> do
     asFocus .= FocusHistory
     let vp = viewportScroll NameHistoryViewport
@@ -446,6 +446,29 @@ handleMainEvent ev = case ev of
     asFocus .= FocusHistory
     let vp = viewportScroll NameHistoryViewport
     vScrollPage vp Down
+
+  -- Arrow key scrolling (when focused on history OR input is empty)
+  EvKey KUp [] -> do
+    st <- get
+    let editorEmpty = T.null (getEditorContent (_asInputEditor st))
+    if _asFocus st == FocusHistory || editorEmpty
+      then do
+        let vp = viewportScroll NameHistoryViewport
+        vScrollBy vp (-1)
+      else zoom asInputEditor $ handleEditorEvent (VtyEvent ev)
+
+  EvKey KDown [] -> do
+    st <- get
+    let editorEmpty = T.null (getEditorContent (_asInputEditor st))
+    if _asFocus st == FocusHistory || editorEmpty
+      then do
+        let vp = viewportScroll NameHistoryViewport
+        vScrollBy vp 1
+      else zoom asInputEditor $ handleEditorEvent (VtyEvent ev)
+
+  -- Escape returns focus to input
+  EvKey KEsc [] -> do
+    asFocus .= FocusInput
 
   -- Send message
   EvKey KEnter [] -> do

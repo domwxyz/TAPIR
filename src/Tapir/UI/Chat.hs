@@ -71,11 +71,12 @@ wrapTextToWidth width content
 
 -- | Helper to wrap text in a viewport-safe way using Widget monad
 -- Uses the available context width to wrap text dynamically
+-- NOTE: Must be Greedy horizontally to properly fill available space before wrapping
 wrapText :: Text -> Widget n
-wrapText t = Widget Fixed Fixed $ do
+wrapText t = Widget Greedy Fixed $ do
     ctx <- getContext
-    -- Account for borders and padding (subtract 4 for safety margin)
-    let availWidth = max 20 (availWidth' ctx - 4)
+    -- Account for borders and padding (subtract 2 for safety margin)
+    let availWidth = max 20 (availWidth' ctx - 2)
         wrapped = wrapTextToWidth availWidth t
     render $ vBox $ map txt wrapped
   where

@@ -82,10 +82,11 @@ wrapTextToWidth width content
 
 -- | Helper to wrap text in a viewport-safe way using Widget monad
 -- Uses the available context width to wrap text dynamically
+-- NOTE: Must be Greedy horizontally to properly fill available space before wrapping
 wrapTextDynamic :: Text -> Widget Name
-wrapTextDynamic t = Widget Fixed Fixed $ do
+wrapTextDynamic t = Widget Greedy Fixed $ do
     ctx <- getContext
-    let availWidth = max 20 (ctx ^. availWidthL - 6)
+    let availWidth = max 20 (ctx ^. availWidthL - 2)
         wrapped = wrapTextToWidth availWidth t
     render $ vBox $ map txt wrapped
 
@@ -135,56 +136,37 @@ renderInlineCorrections corrs =
           | otherwise = ((k, expls) :) <$> findAndUpdate key expl rest
 
     renderGroupedCorrection ((original, fixed), explanations) =
-      [ padLeft (Pad 2) $ hBox
-          [ withAttr attrError $ txt $ "✗ " <> original
-          , txt " → "
-          , withAttr attrSuccess $ txt fixed
-          , case explanations of
-              [single] -> withAttr attrTimestamp $ txt $ "  (" <> single <> ")"
-              _ -> emptyWidget
+      -- Render original and fixed on separate lines so long text can wrap
+      [ padLeft (Pad 2) $ withAttr attrError $ txtWrapWords $ "✗ " <> original
+      , padLeft (Pad 4) $ hBox
+          [ withAttr attrSuccess $ txt "→ "
+          , withAttr attrSuccess $ txtWrapWords fixed
           ]
-      ] ++ case explanations of
-        [_] -> []  -- Already shown inline
-        multiple -> map renderExplanation multiple
+      ] ++ map renderExplanation explanations
 
     renderExplanation expl =
-      padLeft (Pad 4) $ withAttr attrTimestamp $ txt $ "· " <> expl
+      padLeft (Pad 4) $ withAttr attrTimestamp $ txtWrapWords $ "· " <> expl
 
--- | Render compact vocabulary (limit to 2 items, inline format)
+-- | Render compact vocabulary (each item on its own line for wrapping)
 renderCompactVocab :: [VocabHighlight] -> [Widget Name]
 renderCompactVocab [] = []
 renderCompactVocab vocab =
-  let limited = take 2 vocab  -- Max 2 vocab items for conversation mode
-      vocabParts = map renderVocabInline limited
+  let limited = take 3 vocab  -- Max 3 vocab items for conversation mode
   in [ txt " "  -- Single blank line
-     , padLeft (Pad 2) $ hBox $
-         [ withAttr attrTimestamp $ txt "Vocab: " ]
-         ++ intersperse (txt " · ") vocabParts
-     ]
+     , padLeft (Pad 2) $ withAttr attrTimestamp $ txt "Vocab:"
+     ] ++ map renderVocabLine limited
   where
-    renderVocabInline VocabHighlight{..} =
-      hBox
-        [ withAttr attrCardFront $ txt vhWord
-        , txt "="
-        , withAttr attrCardBack $ txt vhTranslation
-        ]
+    renderVocabLine VocabHighlight{..} =
+      padLeft (Pad 4) $ txtWrapWords $ vhWord <> " = " <> vhTranslation
 
--- | Render grammar tip (compact, single line)
+-- | Render grammar tip (with text wrapping)
 renderGrammarTip :: Maybe Text -> [Widget Name]
 renderGrammarTip Nothing = []
 renderGrammarTip (Just tip) =
   [ txt " "
-  , padLeft (Pad 2) $ hBox
-      [ withAttr attrTimestamp $ txt "Tip: "
-      , withAttr attrSystemMessage $ txt tip
-      ]
+  , padLeft (Pad 2) $ withAttr attrTimestamp $ txt "Tip:"
+  , padLeft (Pad 4) $ withAttr attrSystemMessage $ txtWrapWords tip
   ]
-
--- | Intersperse separator between list elements
-intersperse :: a -> [a] -> [a]
-intersperse _ []     = []
-intersperse _ [x]    = [x]
-intersperse sep (x:xs) = x : sep : intersperse sep xs
 
 -- ════════════════════════════════════════════════════════════════
 -- CORRECTION MODE
