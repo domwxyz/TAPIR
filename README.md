@@ -6,32 +6,32 @@
 
 A keyboard-driven TUI (Terminal User Interface) for language learning with:
 
-- **Conversational practice** - Chat with an LLM in your target language
-- **Grammar correction** - Get detailed corrections and explanations
-- **Translation** - Bidirectional translation with nuance preservation
-- **Anki flashcard generation** - Direct integration with Anki via AnkiConnect
+- **Conversational practice** - Chat with an LLM in your target language with inline corrections
+- **Grammar correction** - Get detailed corrections with explanations and severity levels
+- **Translation** - Bidirectional translation with cultural notes and alternatives
+- **Anki flashcard generation** - Create rich flashcards with examples, pronunciation, and mnemonics
 
 ### Key Features
 
-- **Structured responses**: All responses use tool/function calling for guaranteed, parseable output
-- **Sectioned display**: Conversation corrections, vocabulary highlights, translation notes, and more are displayed in organized sections
-- **Language-agnostic design**: All language-specific logic lives in YAML configs
+- **Structured responses with color-coded sections**: Tool calling ensures every response is properly formatted with distinct sections for corrections, vocabulary, grammar tips, and more
+- **Beautiful terminal UI**: Organized display with syntax highlighting, making it easy to scan corrections, vocabulary, and explanations at a glance
+- **Language-agnostic design**: All language-specific logic lives in YAML configs - easily add new languages
 - **Command menu**: Ctrl+P for quick access to all commands
-- **Local persistence**: SQLite stores your learning history
-- **Privacy-focused**: Works with OpenRouter, Anthropic, OpenAI, or local Ollama
-- **Full session management**: Create, list, load, delete sessions with message history
-- **Mode-specific prompts**: Each mode uses its own tailored system prompt
-- **Adjustable difficulty**: Change CEFR level (A1-C2) from settings
+- **Local persistence**: SQLite stores your learning history with automatic backups
+- **Privacy-focused**: Works with OpenRouter (more providers coming soon)
+- **Full session management**: Create, list, load, delete sessions with complete message history
+- **Mode-specific prompts**: Each mode uses its own tailored system prompt with variable interpolation
+- **Adjustable difficulty**: Change CEFR level (A1-C2) on the fly from settings
+- **Cross-platform**: Works on Linux and Windows
 
 ## Requirements
 
-- **GHC** 9.6.3+ (tested with 9.8.2)
+- **GHC** 9.6.3+ (tested with 9.8.2, 9.10.1)
 - **Cabal** 3.10+
-- **OpenRouter API key** (or other LLM provider)
+- **OpenRouter API key** (currently the only supported provider)
 - **Anki** (optional): For flashcard integration, requires [AnkiConnect](https://ankiweb.net/shared/info/2055492159) plugin
 
 ## Quick Start
-
 ```bash
 # Clone the repository
 git clone https://github.com/domwxyz/TAPIR.git
@@ -48,31 +48,65 @@ cabal test
 cabal run tapir
 ```
 
+### Easy Installation (Linux/macOS)
+```bash
+# Install to ~/.local/bin/tapir
+./install.sh
+
+# Uninstall
+./install.sh uninstall
+```
+
+The install script:
+- Builds an optimized binary
+- Copies it to `~/.local/bin/tapir`
+- Sets up config directory structure
+- Preserves existing configurations
+
+Make sure `~/.local/bin` is in your PATH.
+
 ## Configuration
 
 ### Initial Setup
 
 1. Create the config directory:
-   ```bash
+```bash
    mkdir -p ~/.config/tapir/languages
-   ```
+```
 
 2. Copy `./config/config.yaml` to `~/.config/tapir/config.yaml`:
-   ```bash
+```bash
    cp config/config.yaml ~/.config/tapir/
-   ```
+```
 
 3. Copy the Spanish language module:
-   ```bash
+```bash
    cp languages/spanish.yaml ~/.config/tapir/languages/
-   ```
+```
 
-4. Set your API key (config file or environment variable):
-   ```bash
+4. Set your OpenRouter API key:
+```bash
    export OPENROUTER_API_KEY="sk-or-v1-..."
-   ```
+```
+   
+   Or add it directly to `config.yaml`:
+```yaml
+   provider:
+     api_key: "sk-or-v1-..."
+```
 
- ### Keyboard Shortcuts
+### Advanced Configuration
+
+The `config.yaml` supports:
+- **Rate limiting**: Control requests per minute
+- **Database backups**: Automatic backup rotation
+- **Logging**: Configurable log levels and rotation
+- **UI theming**: Dark/light themes
+- **Model selection**: Choose from available OpenRouter models
+
+See `config/config.yaml` for all available options.
+
+## Keyboard Shortcuts
 
 | Key | Action |
 |-----|--------|
@@ -107,49 +141,139 @@ cabal run tapir
 | `Enter` | Push to Anki |
 | `D` | Discard card |
 
-### Modes
+## Modes
 
-1. **Chat** - Free conversation practice in your target language with inline corrections and vocabulary highlights
-2. **Correct** - Grammar correction with detailed explanations, categories, and severity levels
-3. **Translate** - Bidirectional translation between languages with notes on idioms, alternatives, and formality
-4. **Card** - Generate Anki flashcards from vocabulary with examples, pronunciation, mnemonics, and related words
+### 1. Chat Mode
+Free conversation practice with:
+- **Inline corrections**: See errors highlighted as you chat
+- **Vocabulary highlights**: 1-2 useful words per exchange with translations and gender
+- **Grammar tips**: Contextual grammar notes when relevant
+- **Part-of-speech tagging**: Know if words are nouns, verbs, adjectives, etc.
 
-Each mode has:
-- A dedicated system prompt
-- A specific tool definition that ensures structured JSON responses
-- Custom rendering that highlights different sections appropriately
+### 2. Correct Mode
+Detailed grammar correction with:
+- **Side-by-side comparison**: Original vs. corrected text
+- **Categorized corrections**: Grammar, spelling, conjugation, accents, word choice
+- **Severity levels**: Minor, moderate, or significant errors
+- **Detailed explanations**: Understand *why* it was wrong and how to remember
+- **Encouragement**: Positive feedback on your progress
 
-Press `Tab` to cycle through modes.
+### 3. Translate Mode
+Professional translation with:
+- **Bidirectional**: Spanish↔English or any language pair
+- **Formality detection**: Formal, informal, or neutral register
+- **Literal meanings**: See word-for-word translations of idioms
+- **Cultural notes**: Context about cultural expressions
+- **Alternatives**: Multiple translation options for ambiguous phrases
 
-### Structured Responses
+### 4. Card Mode  
+Generate rich Anki flashcards with:
+- **Front/back**: Target language → Native language
+- **Example sentences**: See the word in context
+- **Pronunciation**: IPA phonetic transcription
+- **Mnemonics**: Memory aids to help retention
+- **Related words**: Synonyms, antonyms, word families
+- **Usage notes**: Grammar patterns, common collocations
+- **Smart tags**: Automatic categorization (noun, verb, A1-C2 level)
 
-TAPIR uses OpenAI-compatible tool/function calling to guarantee structured responses from LLMs:
+## How It Works
 
-- **Conversation Mode**: Includes inline corrections, vocabulary highlights (with parts of speech and gender), and grammar tips
-- **Correction Mode**: Shows original vs corrected text, categorized corrections with severity levels, and encouragement
-- **Translation Mode**: Displays source and target languages, alternatives, formality level, literal meanings, and cultural notes
-- **Card Mode**: Front/back with examples, pronunciation (IPA), mnemonics, related words, and usage notes
+### Tool-Based Structured Output
 
-All responses are parsed and rendered with colored sections for easy readability.
+TAPIR uses **OpenAI-compatible tool/function calling** to guarantee structured responses:
+
+1. User sends a message in Spanish (e.g., "Hola como estas")
+2. TAPIR calls the LLM with mode-specific tools that define exact JSON schemas
+3. LLM responds using the tool, ensuring properly formatted output
+4. TAPIR parses the JSON and renders it with color-coded sections
+
+This approach eliminates:
+- ❌ Unparseable responses
+- ❌ Inconsistent formatting
+- ❌ Missing fields
+- ❌ Hallucinated structure
+
+And provides:
+- ✅ Guaranteed JSON parsing
+- ✅ Type-safe response handling
+- ✅ Beautiful, consistent UI rendering
+- ✅ Reliable data extraction for database storage
+
+### Prompt Templating
+
+Language modules support variable interpolation in prompts:
+```yaml
+system_prompt: |
+  You are a {{language}} learning companion for {{level}} learners.
+  The learner speaks {{native_language}} natively.
+  Use {{variant}} {{language}} dialect.
+```
+
+Variables automatically filled:
+- `{{language}}` → "Spanish"
+- `{{level}}` → "A1" (or current learner level)
+- `{{native_language}}` → "English"
+- `{{variant}}` → "Latin American"
+- `{{level_description}}` → "beginner"
+
+## Database & Persistence
+
+All data is stored locally in SQLite (`~/.local/share/tapir/tapir.db`):
+
+- **Sessions**: Conversation sessions with metadata
+- **Messages**: Full message history with timestamps, models, token counts
+- **Cards**: Generated flashcards with push status
+- **Automatic backups**: Configurable backup rotation
+- **Views**: Pre-computed session statistics and recent sessions
+
+Schema supports:
+- Foreign key cascades (delete session → delete messages)
+- Full-text search (future feature)
+- Metadata tracking (app version, schema version)
 
 ## Project Structure
-
 ```
 TAPIR/
 ├── app/                    # Executable entry point
 ├── src/Tapir/             # Library source
 │   ├── Types/             # Core domain types
+│   │   ├── Mode.hs        # Learning modes
+│   │   ├── Language.hs    # Language module types
+│   │   ├── Provider.hs    # LLM provider config
+│   │   └── Response.hs    # Structured response types
 │   ├── Config/            # Configuration system
+│   │   ├── Types.hs       # Config types
+│   │   ├── Loader.hs      # YAML loading & validation
+│   │   └── Defaults.hs    # Default configurations
 │   ├── UI/                # Brick TUI components
+│   │   ├── App.hs         # Main app & event handling
+│   │   ├── Types.hs       # UI state types
+│   │   ├── Attrs.hs       # Color schemes
+│   │   ├── Chat.hs        # Chat history display
+│   │   ├── Input.hs       # Text input widget
+│   │   ├── StatusBar.hs   # Bottom status bar
+│   │   ├── Modals.hs      # Modal dialogs
+│   │   ├── Structured.hs  # Structured response rendering
+│   │   └── Widgets.hs     # Reusable widgets
 │   ├── Client/            # LLM & Anki clients
+│   │   ├── LLM/           # LLM abstraction
+│   │   │   ├── Types.hs       # Request/response types
+│   │   │   ├── OpenRouter.hs  # OpenRouter implementation
+│   │   │   ├── Tools.hs       # Tool/function definitions
+│   │   │   ├── Request.hs     # Request building
+│   │   │   └── Response.hs    # Response parsing
+│   │   └── Anki.hs        # AnkiConnect integration
 │   ├── Db/                # Database layer
-│   └── Util/              # Utilities
+│   │   ├── Schema.hs      # DDL & migrations
+│   │   └── Repository.hs  # CRUD operations
+│   └── Types.hs           # Re-export hub
 ├── test/                  # Test suite
-└── languages/             # Language module templates
+├── config/                # Default configuration
+├── languages/             # Language module templates
+└── install.sh             # Installation script
 ```
 
 ## Development
-
 ```bash
 # Interactive REPL
 cabal repl
@@ -162,6 +286,9 @@ cabal clean && cabal build
 
 # Run tests with details
 cabal test --test-show-details=streaming
+
+# Format code (if using ormolu)
+find src -name "*.hs" -exec ormolu --mode inplace {} \;
 ```
 
 ## Architecture
@@ -169,18 +296,46 @@ cabal test --test-show-details=streaming
 TAPIR follows a clean architecture with:
 
 - **Types layer**: Pure domain types with no dependencies
-- **Config layer**: YAML parsing and validation
-- **Client layer**: External service integrations (LLM, Anki)
-- **Database layer**: Persistence with repository pattern
-- **UI layer**: Brick TUI with event-driven updates
+- **Config layer**: YAML parsing, validation, and prompt templating
+- **Client layer**: External service integrations (LLM, Anki) with proper abstractions
+- **Database layer**: Persistence with repository pattern and type-safe queries
+- **UI layer**: Brick TUI with event-driven updates and functional composition
 
 ### Technology Stack
 
-- **brick 2.4+** for TUI
-- **vty-crossplatform** for terminal handling
-- **http-client** for HTTP with streaming
-- **sqlite-simple** for persistence
-- **yaml/aeson** for configuration
+- **brick 2.4+** for TUI framework
+- **vty-crossplatform** for cross-platform terminal handling
+- **http-client** for HTTP with streaming support
+- **sqlite-simple** for persistence with type-safe queries
+- **yaml/aeson** for configuration and JSON handling
+- **microlens** for functional record updates
+- **stm** for concurrent state management
+
+## Current Limitations
+
+- **Provider support**: Only OpenRouter is currently implemented
+  - Anthropic, OpenAI, and Ollama support is planned
+- **Language modules**: Only Spanish is included
+  - Community contributions for other languages welcome!
+
+## Creating Language Modules
+
+TAPIR makes it easy to add new languages. Copy `languages/spanish.yaml` and modify:
+```yaml
+language:
+  id: french
+  name: "French"
+  native_name: "Français"
+  code: fr
+  variant: france  # or: québec, neutral
+
+modes:
+  conversation:
+    system_prompt: |
+      Vous êtes un compagnon d'apprentissage du {{language}}...
+```
+
+All prompts support templating with `{{language}}`, `{{level}}`, `{{native_language}}`, etc.
 
 ## Documentation
 
@@ -195,10 +350,29 @@ For AI agents working on this codebase, see:
 Set `OPENROUTER_API_KEY` environment variable or add `api_key` to config.yaml.
 
 ### "Language module not found"
-Ensure `~/.config/tapir/languages/spanish.yaml` exists and `active_language` matches.
+Ensure `~/.config/tapir/languages/spanish.yaml` exists and `active_language` in config.yaml matches the filename (without `.yaml`).
 
 ### "Anki not running" or card push fails
-Start Anki and ensure AnkiConnect plugin is installed (add-on code: 2055492159).
+1. Start Anki desktop application
+2. Ensure AnkiConnect plugin is installed (Tools → Add-ons → Get Add-ons → Code: 2055492159)
+3. Check that AnkiConnect is listening on localhost:8765
+
+### Database errors
+The database will auto-initialize. If corrupted:
+```bash
+rm ~/.local/share/tapir/tapir.db
+# Restart TAPIR to recreate
+```
+
+## Contributing
+
+Contributions welcome! Areas of interest:
+
+- **Language modules**: Add support for more languages
+- **Provider implementations**: Anthropic, OpenAI, Ollama
+- **UI improvements**: Themes, layouts, widgets
+- **Features**: Spaced repetition, grammar drills, pronunciation practice
+- **Documentation**: Tutorials, screencasts, guides
 
 ## License
 
@@ -206,6 +380,5 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Project Status**: Complete and Functional
-**Last Updated**: January 23, 2026
-
+**Last Updated**: January 24, 2026 
+**Tested On**: Linux (Debian 13), Windows 10
