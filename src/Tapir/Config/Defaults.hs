@@ -29,6 +29,7 @@ defaultProviderConfig = ProviderConfig
   { providerType = OpenRouter
   , providerApiKeyEnv = "OPENROUTER_API_KEY"
   , providerApiKey = Nothing
+  , providerBaseUrl = Nothing
   , providerModel = "z-ai/glm-4.7"
   , providerTemperature = 0.7
   , providerMaxTokens = 2000

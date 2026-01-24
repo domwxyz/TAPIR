@@ -30,6 +30,8 @@ import Tapir.Types (TapirError(..), ProviderType(..))
 import Tapir.Types.Provider (ProviderConfig(..))
 import Tapir.Client.LLM.Types
 import qualified Tapir.Client.LLM.OpenRouter as OpenRouter
+import qualified Tapir.Client.LLM.OpenAI as OpenAI
+import qualified Tapir.Client.LLM.Ollama as Ollama
 
 -- ════════════════════════════════════════════════════════════════
 -- CLIENT INTERFACE
@@ -75,8 +77,8 @@ mkLLMClient :: ProviderConfig -> IO LLMClient
 mkLLMClient cfg = case providerType cfg of
   OpenRouter -> mkOpenRouterClient cfg
   Anthropic  -> pure $ notImplementedClient "Anthropic"
-  OpenAI     -> pure $ notImplementedClient "OpenAI"
-  Ollama     -> pure $ notImplementedClient "Ollama"
+  OpenAI     -> mkOpenAIClient cfg
+  Ollama     -> mkOllamaClient cfg
 
 -- | Create OpenRouter client wrapper
 mkOpenRouterClient :: ProviderConfig -> IO LLMClient
@@ -86,16 +88,56 @@ mkOpenRouterClient cfg = do
     { llmProviderName = "OpenRouter"
     , llmComplete = OpenRouter.sendRequest client
     , llmStreamComplete = \req cb cancel ->
-        convertStreamResult <$> OpenRouter.streamRequest client req cb cancel
+        convertOpenRouterResult <$> OpenRouter.streamRequest client req cb cancel
     , llmIsConfigured = OpenRouter.checkConfigured cfg
     }
   where
     -- Convert OpenRouter.StreamResult to our StreamResult
-    convertStreamResult :: Either TapirError OpenRouter.StreamResult -> Either TapirError StreamResult
-    convertStreamResult = fmap $ \r -> StreamResult
+    convertOpenRouterResult :: Either TapirError OpenRouter.StreamResult -> Either TapirError StreamResult
+    convertOpenRouterResult = fmap $ \r -> StreamResult
       { srFullResponse = OpenRouter.srFullResponse r
       , srModel = OpenRouter.srModel r
       , srTokensUsed = OpenRouter.srTokensUsed r
+      }
+
+-- | Create OpenAI client wrapper
+mkOpenAIClient :: ProviderConfig -> IO LLMClient
+mkOpenAIClient cfg = do
+  client <- OpenAI.mkClient cfg
+  pure LLMClient
+    { llmProviderName = "OpenAI"
+    , llmComplete = OpenAI.sendRequest client
+    , llmStreamComplete = \req cb cancel ->
+        convertOpenAIResult <$> OpenAI.streamRequest client req cb cancel
+    , llmIsConfigured = OpenAI.checkConfigured cfg
+    }
+  where
+    -- Convert OpenAI.StreamResult to our StreamResult
+    convertOpenAIResult :: Either TapirError OpenAI.StreamResult -> Either TapirError StreamResult
+    convertOpenAIResult = fmap $ \r -> StreamResult
+      { srFullResponse = OpenAI.srFullResponse r
+      , srModel = OpenAI.srModel r
+      , srTokensUsed = OpenAI.srTokensUsed r
+      }
+
+-- | Create Ollama client wrapper
+mkOllamaClient :: ProviderConfig -> IO LLMClient
+mkOllamaClient cfg = do
+  client <- Ollama.mkClient cfg
+  pure LLMClient
+    { llmProviderName = "Ollama"
+    , llmComplete = Ollama.sendRequest client
+    , llmStreamComplete = \req cb cancel ->
+        convertOllamaResult <$> Ollama.streamRequest client req cb cancel
+    , llmIsConfigured = Ollama.checkConfigured cfg
+    }
+  where
+    -- Convert Ollama.StreamResult to our StreamResult
+    convertOllamaResult :: Either TapirError Ollama.StreamResult -> Either TapirError StreamResult
+    convertOllamaResult = fmap $ \r -> StreamResult
+      { srFullResponse = Ollama.srFullResponse r
+      , srModel = Ollama.srModel r
+      , srTokensUsed = Ollama.srTokensUsed r
       }
 
 -- | Placeholder client for unimplemented providers

@@ -53,6 +53,8 @@ library
     Tapir.Client.LLM
     Tapir.Client.LLM.Types
     Tapir.Client.LLM.OpenRouter
+    Tapir.Client.LLM.OpenAI
+    Tapir.Client.LLM.Ollama
     Tapir.Client.LLM.Tools
     Tapir.Client.LLM.Request
     Tapir.Client.LLM.Response
@@ -136,7 +138,10 @@ test-suite tapir-test
     Tapir.Config.LoaderSpec
     Tapir.Db.RepositorySpec
     Tapir.Client.LLM.TypesSpec
+    Tapir.Client.LLM.OpenAISpec
+    Tapir.Client.LLM.OllamaSpec
     Tapir.Types.ResponseSpec
+    Tapir.Types.ProviderSpec
     Tapir.Client.LLM.ToolsSpec
     Tapir.Client.LLM.RequestSpec
     Tapir.Client.LLM.ResponseSpec

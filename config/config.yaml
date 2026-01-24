@@ -6,16 +6,32 @@ active_language: spanish
 
 # LLM Provider Configuration
 provider:
-  # Provider type: openrouter, anthropic, openai, or ollama
+  # Provider type: openrouter, openai, ollama, or anthropic
+  # - openrouter: Access many models via OpenRouter (default)
+  # - openai: Use OpenAI's API directly
+  # - ollama: Use a local Ollama server
+  # - anthropic: Use Anthropic's API directly (not yet implemented)
   type: openrouter
 
   # API key: either set directly or use environment variable
   # For environment variables, set the env var (e.g., export OPENROUTER_API_KEY="...")
   # and leave api_key empty/commented out
+  # Note: OpenAI uses OPENAI_API_KEY, Ollama typically doesn't need a key
   api_key_env: OPENROUTER_API_KEY
   # api_key: "sk-or-v1-..."  # Uncomment to set directly instead of using env var
 
-  # Model to use
+  # Custom base URL (optional)
+  # Use this for self-hosted endpoints or when the default URL doesn't work
+  # Examples:
+  #   - For Ollama: "http://localhost:11434" (default for Ollama)
+  #   - For custom OpenAI-compatible: "http://myserver:8080"
+  # base_url: "http://localhost:11434"
+
+  # Model to use (provider-specific)
+  # Examples:
+  #   - OpenRouter: "z-ai/glm-4.7", "anthropic/claude-3-sonnet", "openai/gpt-4o"
+  #   - OpenAI: "gpt-4o", "gpt-4o-mini", "gpt-4-turbo"
+  #   - Ollama: "llama3.2", "mistral", "codellama"
   model: "z-ai/glm-4.7"
 
   # Generation parameters
@@ -32,6 +48,7 @@ provider:
     retry_after_seconds: 60
 
   # Timeout settings (seconds)
+  # Note: Ollama may need longer timeouts for local inference
   timeout_seconds: 30
   connect_timeout_seconds: 10
 

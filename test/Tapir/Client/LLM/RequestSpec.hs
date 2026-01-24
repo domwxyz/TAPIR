@@ -65,6 +65,7 @@ mockProviderConfig = ProviderConfig
   { providerType = OpenRouter
   , providerApiKeyEnv = "OPENROUTER_API_KEY"
   , providerApiKey = Just "test-key"
+  , providerBaseUrl = Nothing
   , providerModel = "test-model"
   , providerTemperature = 0.7
   , providerMaxTokens = 2000

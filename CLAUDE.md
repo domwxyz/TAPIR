@@ -55,7 +55,9 @@ TAPIR/
 │   │   │   ├── Tools.hs      # Tool definitions
 │   │   │   ├── Request.hs    # Request building
 │   │   │   ├── Response.hs   # Response parsing
-│   │   │   └── OpenRouter.hs # OpenRouter implementation
+│   │   │   ├── OpenRouter.hs # OpenRouter implementation
+│   │   │   ├── OpenAI.hs     # OpenAI implementation
+│   │   │   └── Ollama.hs     # Ollama implementation (local)
 │   │   └── Anki.hs           # AnkiConnect client
 │   ├── Db/
 │   │   ├── Schema.hs         # Database initialization
@@ -86,9 +88,11 @@ TAPIR/
 active_language: spanish
 
 provider:
+  # Provider type: openrouter (default), openai, ollama
   type: openrouter
   api_key: "your-api-key-here"
   model: "z-ai/glm-4.7"
+  # base_url: "http://localhost:11434"  # Optional: custom endpoint
   temperature: 0.7
   max_tokens: 2000
   stream: true
@@ -105,6 +109,33 @@ anki:
   enabled: true
   host: "localhost"
   port: 8765
+```
+
+### Provider Examples
+
+**OpenRouter (default):**
+```yaml
+provider:
+  type: openrouter
+  api_key_env: OPENROUTER_API_KEY
+  model: "z-ai/glm-4.7"
+```
+
+**OpenAI:**
+```yaml
+provider:
+  type: openai
+  api_key_env: OPENAI_API_KEY
+  model: "gpt-4o"
+```
+
+**Ollama (local):**
+```yaml
+provider:
+  type: ollama
+  base_url: "http://localhost:11434"
+  model: "llama3.2"
+  timeout_seconds: 60  # Longer timeout for local inference
 ```
 
 ### Language Module Location

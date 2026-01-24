@@ -56,6 +56,7 @@ data ProviderConfig = ProviderConfig
   { providerType :: !ProviderType
   , providerApiKeyEnv :: !Text
   , providerApiKey :: !(Maybe Text)
+  , providerBaseUrl :: !(Maybe Text)  -- ^ Optional custom base URL (e.g., for Ollama or self-hosted)
   , providerModel :: !Text
   , providerTemperature :: !Double
   , providerMaxTokens :: !Int
@@ -72,6 +73,7 @@ instance FromJSON ProviderConfig where
       <$> v .: "type"
       <*> v .:? "api_key_env" .!= "OPENROUTER_API_KEY"
       <*> v .:? "api_key"
+      <*> v .:? "base_url"
       <*> v .:? "model" .!= "z-ai/glm-4.7"
       <*> v .:? "temperature" .!= 0.7
       <*> v .:? "max_tokens" .!= 2000
