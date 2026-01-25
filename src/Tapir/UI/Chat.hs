@@ -37,11 +37,10 @@ import Tapir.UI.Widgets (wrapTextDynamic)
 -- | Safe unsnoc - decompose list into init and last (total implementation)
 unsnoc :: [a] -> Maybe ([a], a)
 unsnoc [] = Nothing
-unsnoc xs = Just (go xs)
-  where
-    go [y]    = ([], y)
-    go (y:ys) = let (zs, z) = go ys in (y:zs, z)
-    go []     = error "unsnoc: impossible - guarded by outer pattern"
+unsnoc [x] = Just ([], x)
+unsnoc (x:xs) = case unsnoc xs of
+  Nothing -> Nothing  -- Cannot happen due to pattern above, but keeps it total
+  Just (ys, y) -> Just (x:ys, y)
 
 -- ════════════════════════════════════════════════════════════════
 -- MAIN CHAT WIDGET

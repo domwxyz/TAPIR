@@ -28,6 +28,7 @@ import Tapir.Client.LLM.Types
 import qualified Tapir.Client.LLM.OpenRouter as OpenRouter
 import qualified Tapir.Client.LLM.OpenAI as OpenAI
 import qualified Tapir.Client.LLM.Ollama as Ollama
+import Tapir.Core.Constants (providerNameOpenRouter, providerNameOpenAI, providerNameOllama)
 
 -- ════════════════════════════════════════════════════════════════
 -- CLIENT INTERFACE
@@ -70,7 +71,7 @@ mkOpenRouterClient :: ProviderConfig -> IO LLMClient
 mkOpenRouterClient cfg = do
   client <- OpenRouter.mkClient cfg
   pure LLMClient
-    { llmProviderName = "OpenRouter"
+    { llmProviderName = providerNameOpenRouter
     , llmComplete = OpenRouter.sendRequest client
     , llmStreamComplete = OpenRouter.streamRequest client
     , llmIsConfigured = OpenRouter.checkConfigured cfg
@@ -81,7 +82,7 @@ mkOpenAIClient :: ProviderConfig -> IO LLMClient
 mkOpenAIClient cfg = do
   client <- OpenAI.mkClient cfg
   pure LLMClient
-    { llmProviderName = "OpenAI"
+    { llmProviderName = providerNameOpenAI
     , llmComplete = OpenAI.sendRequest client
     , llmStreamComplete = OpenAI.streamRequest client
     , llmIsConfigured = OpenAI.checkConfigured cfg
@@ -92,7 +93,7 @@ mkOllamaClient :: ProviderConfig -> IO LLMClient
 mkOllamaClient cfg = do
   client <- Ollama.mkClient cfg
   pure LLMClient
-    { llmProviderName = "Ollama"
+    { llmProviderName = providerNameOllama
     , llmComplete = Ollama.sendRequest client
     , llmStreamComplete = Ollama.streamRequest client
     , llmIsConfigured = Ollama.checkConfigured cfg

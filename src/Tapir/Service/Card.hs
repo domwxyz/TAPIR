@@ -36,6 +36,7 @@ import Data.Time (UTCTime)
 
 import Tapir.Types (AnkiCard(..))
 import Tapir.Types.Response (CardResponse(..))
+import Tapir.Core.Constants (ankiDefaultDeckSuffix)
 
 -- | Extract a flashcard from an LLM response
 -- Tries multiple parsing strategies in order:
@@ -137,7 +138,7 @@ mkCard langId sessionId' sourceMsgId front back tags now = AnkiCard
   , cardFront       = front
   , cardBack        = back
   , cardTags        = tags
-  , cardDeck        = langId <> "::TAPIR"
+  , cardDeck        = langId <> ankiDefaultDeckSuffix
   , cardSourceMsgId = sourceMsgId
   , cardAnkiNoteId  = Nothing
   , cardPushedAt    = Nothing
@@ -153,7 +154,7 @@ cardResponseToAnkiCard cr sessionId' langId now = AnkiCard
   , cardFront       = cardRespFront cr
   , cardBack        = formatCardBack (cardRespBack cr) (cardRespExample cr) (cardRespNotes cr)
   , cardTags        = cardRespTags cr
-  , cardDeck        = langId <> "::TAPIR"
+  , cardDeck        = langId <> ankiDefaultDeckSuffix
   , cardSourceMsgId = Nothing
   , cardAnkiNoteId  = Nothing
   , cardPushedAt    = Nothing

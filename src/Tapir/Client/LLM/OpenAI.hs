@@ -42,6 +42,7 @@ import Tapir.Types (TapirError)
 import Tapir.Types.Provider (ProviderConfig(..))
 import Tapir.Client.LLM.Types (ChatRequest, ChatResponse, StreamResult(..), StreamCallback)
 import Tapir.Client.LLM.Base
+import Tapir.Core.Constants (openAIApiEndpoint)
 
 -- | OpenAI client (wrapper around generic client)
 type OpenAIClient = GenericLLMClient
@@ -49,7 +50,7 @@ type OpenAIClient = GenericLLMClient
 -- | OpenAI API endpoint
 openAIEndpoint :: ProviderEndpoint
 openAIEndpoint = ProviderEndpoint
-  { peBaseUrl = "https://api.openai.com/v1/chat/completions"
+  { peBaseUrl = openAIApiEndpoint
   , peAuthHeader = Just bearerAuth
   , peExtraHeaders = id  -- No extra headers needed
   , peRequiresAuth = True

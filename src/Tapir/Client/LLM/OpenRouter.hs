@@ -45,6 +45,7 @@ import Tapir.Types (TapirError)
 import Tapir.Types.Provider (ProviderConfig(..))
 import Tapir.Client.LLM.Types (ChatRequest, ChatResponse, StreamResult(..), StreamCallback)
 import Tapir.Client.LLM.Base
+import Tapir.Core.Constants (openRouterApiEndpoint)
 
 -- | OpenRouter client (wrapper around generic client)
 type OpenRouterClient = GenericLLMClient
@@ -52,7 +53,7 @@ type OpenRouterClient = GenericLLMClient
 -- | OpenRouter API endpoint
 openRouterEndpoint :: ProviderEndpoint
 openRouterEndpoint = ProviderEndpoint
-  { peBaseUrl = "https://openrouter.ai/api/v1/chat/completions"
+  { peBaseUrl = openRouterApiEndpoint
   , peAuthHeader = Just bearerAuth
   , peExtraHeaders = addOpenRouterHeaders
   , peRequiresAuth = True

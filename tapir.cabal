@@ -40,6 +40,9 @@ library
   import: shared-properties
   hs-source-dirs: src
   exposed-modules:
+    Tapir.Core.Constants
+    Tapir.Core.Error
+    Tapir.Core.Logging
     Tapir.Types
     Tapir.Types.Mode
     Tapir.Types.Language
@@ -63,6 +66,7 @@ library
     Tapir.Client.LLM.Response
     Tapir.Client.Anki
     Tapir.Service.Card
+    Tapir.Service.LLM
     Tapir.UI.Types
     Tapir.UI.Attrs
     Tapir.UI.Widgets
@@ -72,6 +76,16 @@ library
     Tapir.UI.Modals
     Tapir.UI.Structured
     Tapir.UI.App
+    Tapir.UI.Draw
+    Tapir.UI.Event
+    Tapir.UI.Event.Main
+    Tapir.UI.Event.Modal
+    Tapir.UI.Event.Custom
+    Tapir.UI.Event.Session
+    Tapir.UI.Event.Message
+    Tapir.UI.Event.Card
+    Tapir.UI.Event.Settings
+    Tapir.UI.Command
   build-depends:
       base >=4.17 && <5
     , text >=2.0 && <2.2

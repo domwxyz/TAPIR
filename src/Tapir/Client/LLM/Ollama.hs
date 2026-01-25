@@ -41,6 +41,7 @@ import Tapir.Types (TapirError)
 import Tapir.Types.Provider (ProviderConfig(..))
 import Tapir.Client.LLM.Types (ChatRequest, ChatResponse, StreamResult(..), StreamCallback)
 import Tapir.Client.LLM.Base
+import Tapir.Core.Constants (ollamaDefaultEndpoint)
 
 -- | Ollama client (wrapper around generic client)
 type OllamaClient = GenericLLMClient
@@ -49,7 +50,7 @@ type OllamaClient = GenericLLMClient
 getBaseUrl :: ProviderConfig -> String
 getBaseUrl cfg = case providerBaseUrl cfg of
   Just url -> T.unpack url <> "/v1/chat/completions"
-  Nothing  -> "http://localhost:11434/v1/chat/completions"
+  Nothing  -> ollamaDefaultEndpoint
 
 -- | Create Ollama endpoint config
 ollamaEndpoint :: ProviderConfig -> ProviderEndpoint

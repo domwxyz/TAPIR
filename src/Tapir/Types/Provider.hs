@@ -35,9 +35,15 @@ instance FromJSON ProviderType where
     _ -> fail "Invalid provider type"
 
 -- | Rate limit configuration
+--
+-- __Status: NOT YET IMPLEMENTED__
+--
+-- This configuration is parsed but rate limiting is not yet enforced.
+--
+-- TODO: Implement rate limiting with retry logic
 data RateLimit = RateLimit
-  { rateLimitRequestsPerMinute :: !Int
-  , rateLimitRetryAfterSeconds :: !Int
+  { rateLimitRequestsPerMinute :: !Int   -- ^ TODO: Not enforced
+  , rateLimitRetryAfterSeconds :: !Int   -- ^ TODO: Not enforced
   } deriving (Eq, Show, Generic)
 
 instance ToJSON RateLimit where
@@ -62,9 +68,9 @@ data ProviderConfig = ProviderConfig
   , providerMaxTokens :: !Int
   , providerTopP :: !Double
   , providerStream :: !Bool
-  , providerRateLimit :: !RateLimit
+  , providerRateLimit :: !RateLimit   -- ^ TODO: Not enforced (see RateLimit)
   , providerTimeoutSeconds :: !Int
-  , providerConnectTimeoutSeconds :: !Int
+  , providerConnectTimeoutSeconds :: !Int  -- ^ TODO: Not yet used in connection setup
   } deriving (Eq, Show, Generic)
 
 instance FromJSON ProviderConfig where

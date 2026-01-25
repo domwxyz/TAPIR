@@ -67,12 +67,19 @@ instance FromJSON UIConfig where
 instance ToJSON UIConfig
 
 -- | Logging configuration
+--
+-- __Status: NOT YET IMPLEMENTED__
+--
+-- This configuration is parsed but logging is not yet active.
+-- Currently, the application uses 'putStrLn' for startup messages only.
+--
+-- TODO: Implement logging with co-log or katip
 data LoggingConfig = LoggingConfig
-  { logEnabled :: !Bool
-  , logLevel :: !Text
-  , logFile :: !FilePath
-  , logMaxSizeMb :: !Int
-  , logRotate :: !Bool
+  { logEnabled :: !Bool      -- ^ TODO: Not enforced
+  , logLevel :: !Text        -- ^ TODO: Not enforced
+  , logFile :: !FilePath     -- ^ TODO: Not used
+  , logMaxSizeMb :: !Int     -- ^ TODO: Not used
+  , logRotate :: !Bool       -- ^ TODO: Not used
   } deriving (Eq, Show, Generic)
 
 instance FromJSON LoggingConfig where
