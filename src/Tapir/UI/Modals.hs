@@ -267,9 +267,10 @@ renderSessionsModal summaries selectedIdx =
   borderWithLabel (withAttr attrModalTitle $ txt " Sessions ") $
   padAll 1 $
   hLimit 70 $
-  vLimit 20 $
   vBox
-    [ vBox $ zipWith (renderSessionRow selectedIdx) [0..] summaries
+    [ vLimit 14 $  -- Fixed height for session list, allows scrolling
+      viewport NameSessionList Vertical $
+      vBox $ zipWith (renderSessionRow selectedIdx) [0..] summaries
     , txt " "
     , hBorder
     , padTop (Pad 1) $ hCenter $ keyHintRow
@@ -289,17 +290,18 @@ renderSessionRow selectedIdx idx SessionSummary{..} =
       prefix = if isSelected then "> " else "  "
       timeStr = T.pack $ formatTime defaultTimeLocale "%Y-%m-%d %H:%M" summaryLastActivity
       countStr = T.pack $ show summaryMessageCount
-  in withAttr attr $
-     hBox
-       [ txt prefix
-       , hLimit 30 $ txt $ T.take 28 summaryTitle <> if T.length summaryTitle > 28 then ".." else ""
-       , txt " "
-       , hLimit 12 $ txt summaryLanguageId
-       , txt " "
-       , hLimit 5 $ txt $ countStr <> " msgs"
-       , txt " "
-       , txt timeStr
-       ]
+      row = withAttr attr $
+            hBox
+              [ txt prefix
+              , hLimit 30 $ txt $ T.take 28 summaryTitle <> if T.length summaryTitle > 28 then ".." else ""
+              , txt " "
+              , hLimit 12 $ txt summaryLanguageId
+              , txt " "
+              , hLimit 5 $ txt $ countStr <> " msgs"
+              , txt " "
+              , txt timeStr
+              ]
+  in if isSelected then visible row else row
 
 -- ════════════════════════════════════════════════════════════════
 -- CONFIRM QUIT MODAL
