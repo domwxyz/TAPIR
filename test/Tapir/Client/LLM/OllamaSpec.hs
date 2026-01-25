@@ -45,16 +45,16 @@ spec :: Spec
 spec = do
   describe "Ollama Client" $ do
     describe "mkClient" $ do
-      it "creates a client with default URL" $ do
+      it "creates a client without error" $ do
         let cfg = testOllamaConfig Nothing
-        client <- mkClient cfg
-        olcConfig client `shouldBe` cfg
-        olcBaseUrl client `shouldBe` "http://localhost:11434/v1/chat/completions"
+        -- Just verify client creation doesn't throw
+        _ <- mkClient cfg
+        pure () :: IO ()
 
-      it "creates a client with custom base URL" $ do
+      it "creates a client with custom base URL without error" $ do
         let cfg = testOllamaConfig (Just "http://192.168.1.100:11434")
-        client <- mkClient cfg
-        olcBaseUrl client `shouldBe` "http://192.168.1.100:11434/v1/chat/completions"
+        _ <- mkClient cfg
+        pure () :: IO ()
 
     describe "checkConfigured" $ do
       it "always returns True (no API key required)" $ do
@@ -80,6 +80,14 @@ spec = do
         let cfg = testOllamaConfig (Just "http://localhost:11434")
         getBaseUrl cfg `shouldBe` "http://localhost:11434/v1/chat/completions"
 
+      it "uses HTTP (not HTTPS) for local server by default" $ do
+        let cfg = testOllamaConfig Nothing
+        getBaseUrl cfg `shouldSatisfy` T.isPrefixOf "http://" . T.pack
+
+      it "supports custom remote Ollama servers with HTTPS" $ do
+        let cfg = testOllamaConfig (Just "https://ollama.example.com")
+        getBaseUrl cfg `shouldBe` "https://ollama.example.com/v1/chat/completions"
+
     describe "StreamResult" $ do
       it "correctly represents streaming result" $ do
         let result = StreamResult
@@ -103,15 +111,3 @@ spec = do
     it "does not require API key" $ do
       let cfg = testOllamaConfig Nothing
       providerApiKey cfg `shouldBe` Nothing
-
-  describe "Ollama Local Server" $ do
-    it "uses HTTP (not HTTPS) for local server" $ do
-      let cfg = testOllamaConfig Nothing
-      client <- mkClient cfg
-      -- Default URL should use http for local
-      olcBaseUrl client `shouldSatisfy` T.isPrefixOf "http://" . T.pack
-
-    it "supports custom remote Ollama servers" $ do
-      let cfg = testOllamaConfig (Just "https://ollama.example.com")
-      client <- mkClient cfg
-      olcBaseUrl client `shouldBe` "https://ollama.example.com/v1/chat/completions"

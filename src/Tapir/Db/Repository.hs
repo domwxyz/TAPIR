@@ -54,50 +54,13 @@ import qualified Data.ByteString.Lazy as BL
 import Data.Time (UTCTime, getCurrentTime)
 import Data.Time.Format.ISO8601 (iso8601Show, iso8601ParseM)
 import Database.SQLite.Simple hiding (withTransaction)
-import Database.SQLite.Simple.ToField
-import Database.SQLite.Simple.FromField
 
 import Tapir.Types
+import Tapir.Db.Instances ()  -- Import for SQLite instances
 
 -- ════════════════════════════════════════════════════════════════
--- HELPER INSTANCES FOR SQLITE
+-- TIME AND TAG HELPERS
 -- ════════════════════════════════════════════════════════════════
-
--- | Store Role as text
-instance ToField Role where
-  toField = toField . roleToText
-
-instance FromField Role where
-  fromField f = do
-    txt <- fromField f
-    case textToRole txt of
-      Just r  -> pure r
-      Nothing -> returnError ConversionFailed f "Invalid role"
-
--- | Store Mode as text
-instance ToField Mode where
-  toField = toField . modeToText
-
-instance FromField Mode where
-  fromField f = do
-    txt <- fromField f
-    pure $ textToMode txt
-
--- | Store LearnerLevel as text
-instance ToField LearnerLevel where
-  toField = toField . T.pack . show
-
-instance FromField LearnerLevel where
-  fromField f = do
-    txt <- fromField @Text f
-    case txt of
-      "A1" -> pure A1
-      "A2" -> pure A2
-      "B1" -> pure B1
-      "B2" -> pure B2
-      "C1" -> pure C1
-      "C2" -> pure C2
-      _    -> returnError ConversionFailed f "Invalid learner level"
 
 -- | Store UTCTime as ISO 8601 text
 utcToText :: UTCTime -> Text
@@ -110,14 +73,20 @@ textToUtc = iso8601ParseM . T.unpack
 tagsToText :: [Text] -> Text
 tagsToText tags = TE.decodeUtf8 $ BL.toStrict $ encode tags
 
--- | Parse tags from JSON, returning empty list for invalid JSON
--- Note: Returns empty list on parse failure since tags are non-critical metadata.
--- The original JSON is preserved in the database so no data is lost.
+-- | Parse tags from JSON, returning empty list for invalid JSON.
+--
+-- Design decision: Returns empty list on parse failure because:
+-- 1. Tags are non-critical metadata - missing tags don't break functionality
+-- 2. The original JSON is preserved in the database, so no data is lost
+-- 3. Failed parsing usually indicates empty or legacy data, not corruption
+--
+-- If tags become critical, consider using 'Either Text [Text]' instead.
 textToTags :: Text -> [Text]
-textToTags txt =
-  case decode (BL.fromStrict $ TE.encodeUtf8 txt) of
-    Just tags -> tags
-    Nothing   -> []  -- Tags are non-critical; empty is safe fallback
+textToTags txt
+  | T.null txt = []
+  | otherwise = case decode (BL.fromStrict $ TE.encodeUtf8 txt) of
+      Just tags -> tags
+      Nothing   -> []
 
 -- ════════════════════════════════════════════════════════════════
 -- SESSION OPERATIONS

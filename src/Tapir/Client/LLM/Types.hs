@@ -29,6 +29,10 @@ module Tapir.Client.LLM.Types
   , ToolCallDelta(..)
   , FunctionCallDelta(..)
 
+    -- * Streaming Result Types (shared across providers)
+  , StreamCallback
+  , StreamResult(..)
+
     -- * Tool Call Types
   , ToolCall(..)
   , FunctionCall(..)
@@ -298,3 +302,17 @@ instance FromJSON APIErrorDetail where
     <$> v .: "message"
     <*> v .: "type"
     <*> v .:? "code"
+
+-- ════════════════════════════════════════════════════════════════
+-- STREAMING RESULT TYPES (shared across providers)
+-- ════════════════════════════════════════════════════════════════
+
+-- | Callback for streaming tokens
+type StreamCallback = Text -> IO ()
+
+-- | Result of a streaming completion
+data StreamResult = StreamResult
+  { srFullResponse :: !Text        -- ^ Complete concatenated response
+  , srModel        :: !Text        -- ^ Model that generated the response
+  , srTokensUsed   :: !(Maybe Int) -- ^ Token count if available
+  } deriving (Eq, Show)

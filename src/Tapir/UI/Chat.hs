@@ -34,10 +34,14 @@ import Tapir.UI.Attrs
 import Tapir.UI.Structured (renderStructuredResponse)
 import Tapir.UI.Widgets (wrapTextDynamic)
 
--- | Safe unsnoc - decompose list into init and last
+-- | Safe unsnoc - decompose list into init and last (total implementation)
 unsnoc :: [a] -> Maybe ([a], a)
 unsnoc [] = Nothing
-unsnoc xs = Just (init xs, last xs)
+unsnoc xs = Just (go xs)
+  where
+    go [y]    = ([], y)
+    go (y:ys) = let (zs, z) = go ys in (y:zs, z)
+    go []     = error "unsnoc: impossible - guarded by outer pattern"
 
 -- ════════════════════════════════════════════════════════════════
 -- MAIN CHAT WIDGET

@@ -71,6 +71,7 @@ module Tapir.UI.Types
 import Brick.BChan (BChan)
 import Brick.Widgets.Edit (Editor)
 import Data.Text (Text)
+import Data.Text.Lazy.Builder (Builder)
 import Data.Time (UTCTime)
 import Database.SQLite.Simple (Connection)
 import Lens.Micro.TH (makeLenses)
@@ -248,7 +249,7 @@ data AppState = AppState
   , _asFocus             :: !Focus                -- ^ Current focus area
   , _asModal             :: !Modal                -- ^ Current modal state
   , _asRequestState      :: !RequestState         -- ^ LLM request state
-  , _asStreamingText     :: !Text                 -- ^ Accumulated streaming text
+  , _asStreamingText     :: !Builder              -- ^ Accumulated streaming text (O(1) append)
   , _asPendingCard       :: !(Maybe AnkiCard)     -- ^ Card pending push to Anki
   , _asPendingStructured  :: !(Maybe StructuredResponse)  -- ^ Parsed structured response
   , _asAnkiConnected     :: !Bool                 -- ^ Anki connection status

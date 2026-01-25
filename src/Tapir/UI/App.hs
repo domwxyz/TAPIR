@@ -32,23 +32,16 @@ module Tapir.UI.App
 import Brick
 import Brick.BChan (BChan, newBChan, writeBChan)
 import Brick.Widgets.Edit (handleEditorEvent)
-import Control.Applicative ((<|>))
 import Control.Concurrent (forkIO)
 import Control.Exception (SomeException, try)
 import Control.Monad (void, when, unless)
 import Control.Monad.IO.Class (liftIO)
 import Data.List (elemIndex)
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as TE
-import Data.Aeson (Value(..), decode)
-import qualified Data.Aeson.Key as K
-import qualified Data.Aeson.KeyMap as KM
-import Data.Time (getCurrentTime, UTCTime)
+import qualified Data.Text.Lazy.Builder as B
+import Data.Time (getCurrentTime)
 import Data.UUID.V4 (nextRandom)
 import qualified Data.UUID as UUID
-import qualified Data.ByteString.Lazy as BL
-import Data.Maybe (mapMaybe)
-import Data.Foldable (toList)
 import Database.SQLite.Simple (Connection)
 import Graphics.Vty (defaultConfig)
 import Graphics.Vty.CrossPlatform (mkVty)
@@ -56,7 +49,7 @@ import Graphics.Vty.Input.Events
 import Lens.Micro.Mtl ((.=), (%=), use)
 
 import Tapir.Types
-import Tapir.Types.Response (StructuredResponse(..), responseToText, CardResponse(..))
+import Tapir.Types.Response (StructuredResponse(..), responseToText)
 import Tapir.Config.Types (AppConfig(..), UIConfig(..))
 import Tapir.Config.Loader (getSystemPrompt, loadLanguageModule, loadConfig)
 import Tapir.Client.LLM
@@ -64,6 +57,7 @@ import Tapir.Client.LLM.Request (buildRequestWithTools)
 import Tapir.Client.LLM.Response (parseResponse, ParsedResponse(..), ParseError(..))
 import Tapir.Client.Anki (mkAnkiClientWithConfig, checkConnection, addNote, AnkiNote(..), defaultNoteOptions)
 import Tapir.Db.Repository (createSession, saveMessage, saveCard, getRecentSessions, getSessionMessages, updateSessionTimestamp, markCardPushed, deleteSession)
+import Tapir.Service.Card (extractCardFromResponse, cardResponseToAnkiCard)
 import Tapir.UI.Types
 import Tapir.UI.Attrs (getAttrMap, attrBorder)
 import Tapir.UI.Chat (renderChat)
@@ -167,10 +161,10 @@ mkInitialState config langMod client conn chan = do
     , _asFocus          = FocusInput
     , _asModal          = NoModal
     , _asRequestState   = Idle
-     , _asStreamingText     = ""
-     , _asPendingCard       = Nothing
-     , _asPendingStructured = Nothing
-     , _asAnkiConnected    = False  -- Will be updated by status poll
+    , _asStreamingText  = mempty  -- Empty Builder
+    , _asPendingCard    = Nothing
+    , _asPendingStructured = Nothing
+    , _asAnkiConnected  = False  -- Will be updated by status poll
     , _asLastError      = Nothing
     , _asConfig         = config
     , _asLangModule     = langMod
@@ -230,7 +224,7 @@ handleEvent = \case
 handleCustomEvent :: TapirEvent -> EventM Name AppState ()
 handleCustomEvent = \case
   EvStreamChunk chunk -> do
-    asStreamingText %= (<> chunk)
+    asStreamingText %= (<> B.fromText chunk)  -- O(1) append with Builder
     asRequestState .= Streaming
     -- Scroll to bottom
     let vp = viewportScroll NameHistoryViewport
@@ -264,7 +258,7 @@ handleCustomEvent = \case
 
     asMessages %= (++ [savedMsg])
     asRequestState .= Idle
-    asStreamingText .= ""
+    asStreamingText .= mempty  -- Reset Builder
 
     -- Update session timestamp
     _ <- liftIO $ updateSessionTimestamp conn sid
@@ -882,122 +876,4 @@ sessionToSummary (sess, count) = SessionSummary
   , summaryLastActivity = sessionUpdatedAt sess
   }
 
--- | Extract a flashcard from an LLM response
--- Looks for common patterns:
--- 1. JSON format: {"front": "...", "back": "...", "tags": [...]}
--- 2. Labeled format: "Front: ...\nBack: ..."
--- 3. Simple format: first line = front, rest = back
-extractCardFromResponse :: T.Text -> T.Text -> Maybe Int -> T.Text -> UTCTime -> Maybe AnkiCard
-extractCardFromResponse langId sessionId' sourceMsgId response now =
-  -- Try parsing patterns in order of preference
-  tryJsonFormat <|> tryLabeledFormat <|> trySimpleFormat
-  where
-    -- Try to parse JSON format
-    tryJsonFormat :: Maybe AnkiCard
-    tryJsonFormat = do
-      -- Clean the response: remove markdown code fences if present
-      let cleanResponse = stripMarkdownFences response
-      -- Try to decode as JSON
-      case decode (BL.fromStrict $ TE.encodeUtf8 cleanResponse) of
-        Just (Object obj) -> do
-          frontVal <- KM.lookup (K.fromString "front") obj
-          backVal <- KM.lookup (K.fromString "back") obj
-          front <- case frontVal of
-            String t -> Just t
-            _ -> Nothing
-          back <- case backVal of
-            String t -> Just t
-            _ -> Nothing
-          -- Extract tags if present, otherwise default to language
-          tags <- case KM.lookup (K.fromString "tags") obj of
-            Just (Array arr) ->
-              Just $ mapMaybe (\v -> case v of
-                String t -> Just t
-                _ -> Nothing) (toList arr)
-            _ -> Just [langId]
-          pure $ mkCard front back tags
-        _ -> Nothing
-
-    -- Strip markdown code fences (```json ... ``` or ``` ... ```)
-    stripMarkdownFences :: T.Text -> T.Text
-    stripMarkdownFences text =
-      let lines' = T.lines text
-          firstNonBlank = dropWhile (T.null . T.strip) lines'
-      in case firstNonBlank of
-        (l:rest)
-          | "```" `T.isPrefixOf` l ->
-              -- Find closing fence
-              case break ("```" `T.isPrefixOf`) rest of
-                (content, _closing:_) -> T.unlines content
-                (content, []) -> T.unlines content
-        _ -> text
-
-    -- Try "Front: ...\nBack: ..." format (case-insensitive)
-    tryLabeledFormat :: Maybe AnkiCard
-    tryLabeledFormat =
-      let lowerResponse = T.toLower response
-      in if "front:" `T.isInfixOf` lowerResponse && "back:" `T.isInfixOf` lowerResponse
-         then
-           -- Find the position of "back:" (case-insensitive)
-           let -- Split on "back:" (trying both cases)
-               (beforeBack, afterBack) =
-                 if "Back:" `T.isInfixOf` response
-                 then T.breakOn "Back:" response
-                 else T.breakOn "back:" response
-               -- Extract front: everything after "front:" up to "back:"
-               frontPart = snd $ T.breakOn ":" $ snd $ T.breakOn "ront:" beforeBack
-               frontText = T.strip $ T.drop 1 frontPart  -- Drop the ':'
-               -- Extract back: everything after "back:"
-               backText = T.strip $ T.drop 5 afterBack  -- Drop "Back:" or "back:"
-           in if T.null frontText || T.null backText
-              then Nothing
-              else Just $ mkCard frontText backText [langId]
-         else Nothing
-
-    -- Simple format: first non-empty line = front, rest = back
-    trySimpleFormat :: Maybe AnkiCard
-    trySimpleFormat =
-      let nonEmptyLines = filter (not . T.null . T.strip) (T.lines response)
-      in case nonEmptyLines of
-        (front:rest) | not (null rest) ->
-          Just $ mkCard (T.strip front) (T.strip $ T.intercalate "\n" rest) [langId]
-        _ -> Nothing
-
-    mkCard :: T.Text -> T.Text -> [T.Text] -> AnkiCard
-    mkCard front back tags = AnkiCard
-      { cardId          = Nothing
-      , cardSessionId   = sessionId'
-      , cardLanguageId  = langId
-      , cardFront       = front
-      , cardBack        = back
-      , cardTags        = tags
-      , cardDeck        = langId <> "::TAPIR"  -- Default deck
-      , cardSourceMsgId = sourceMsgId
-      , cardAnkiNoteId  = Nothing
-      , cardPushedAt    = Nothing
-      , cardCreatedAt   = now
-      }
-
--- | Convert CardResponse to AnkiCard (for structured response)
-cardResponseToAnkiCard :: CardResponse -> T.Text -> T.Text -> UTCTime -> AnkiCard
-cardResponseToAnkiCard cr sessionId' langId now = AnkiCard
-  { cardId          = Nothing
-  , cardSessionId   = sessionId'
-  , cardLanguageId  = langId
-  , cardFront       = cardRespFront cr
-  , cardBack        = formatCardBack (cardRespBack cr) (cardRespExample cr) (cardRespNotes cr)
-  , cardTags        = cardRespTags cr
-  , cardDeck        = langId <> "::TAPIR"
-  , cardSourceMsgId = Nothing
-  , cardAnkiNoteId  = Nothing
-  , cardPushedAt    = Nothing
-  , cardCreatedAt   = now
-  }
-  where
-    formatCardBack back mExample mNotes =
-      T.intercalate "\n\n" $ filter (not . T.null)
-        [ back
-        , maybe "" (\ex -> "Example: " <> ex) mExample
-        , maybe "" id mNotes
-        ]
 

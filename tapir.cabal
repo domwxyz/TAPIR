@@ -49,9 +49,11 @@ library
     Tapir.Config.Loader
     Tapir.Config.Defaults
     Tapir.Db.Schema
+    Tapir.Db.Instances
     Tapir.Db.Repository
     Tapir.Client.LLM
     Tapir.Client.LLM.Types
+    Tapir.Client.LLM.Base
     Tapir.Client.LLM.OpenRouter
     Tapir.Client.LLM.OpenAI
     Tapir.Client.LLM.Ollama
@@ -60,6 +62,7 @@ library
     Tapir.Client.LLM.Request
     Tapir.Client.LLM.Response
     Tapir.Client.Anki
+    Tapir.Service.Card
     Tapir.UI.Types
     Tapir.UI.Attrs
     Tapir.UI.Widgets
@@ -146,3 +149,4 @@ test-suite tapir-test
     Tapir.Client.LLM.ToolsSpec
     Tapir.Client.LLM.RequestSpec
     Tapir.Client.LLM.ResponseSpec
+    Tapir.Service.CardSpec
