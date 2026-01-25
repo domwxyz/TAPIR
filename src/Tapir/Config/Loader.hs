@@ -11,6 +11,7 @@ module Tapir.Config.Loader
   , getSystemPrompt
   ) where
 
+import Control.Applicative ((<|>))
 import Data.List (isPrefixOf)
 import qualified Data.Map.Strict as Map
 import Data.Text (Text)
@@ -136,7 +137,3 @@ getSystemPrompt lm mode = do
             <|> Map.lookup modeKey (customModes lm)
   let vars = promptVarsFromModule lm
   pure $ interpolatePrompt vars (modeSystemPrompt modeConfig)
-  where
-    (<|>) :: Maybe a -> Maybe a -> Maybe a
-    (<|>) (Just x) _ = Just x
-    (<|>) Nothing y = y

@@ -32,10 +32,12 @@ module Tapir.UI.App
 import Brick
 import Brick.BChan (BChan, newBChan, writeBChan)
 import Brick.Widgets.Edit (handleEditorEvent)
+import Control.Applicative ((<|>))
 import Control.Concurrent (forkIO)
 import Control.Exception (SomeException, try)
 import Control.Monad (void, when, unless)
 import Control.Monad.IO.Class (liftIO)
+import Data.List (elemIndex)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import Data.Aeson (Value(..), decode)
@@ -68,6 +70,7 @@ import Tapir.UI.Chat (renderChat)
 import Tapir.UI.Input (renderInput, getEditorContent, mkInputEditor)
 import Tapir.UI.StatusBar (renderStatusBar)
 import Tapir.UI.Modals (renderModal)
+import Tapir.UI.Widgets (safeIndex, safeIndexWithDefault)
 
 -- ════════════════════════════════════════════════════════════════
 -- APPLICATION DEFINITION
@@ -529,193 +532,228 @@ handleModalEvent :: Event -> EventM Name AppState ()
 handleModalEvent ev = do
   st <- get
   case _asModal st of
-    HelpModal -> case ev of
-      EvKey _ _ -> asModal .= NoModal
-      _         -> pure ()
+    HelpModal            -> handleHelpModal ev
+    CommandMenuModal idx -> handleCommandMenuModal ev idx
+    ConfirmQuitModal     -> handleConfirmQuitModal ev
+    SettingsModal        -> handleSettingsModal ev
+    CardPreviewModal card -> handleCardPreviewModal ev card
+    SessionsModal sums idx -> handleSessionsModal ev sums idx
+    ErrorModal _         -> handleDismissableModal ev
+    PromptPreviewModal _ -> handleDismissableModal ev
+    NoModal              -> pure ()
 
-    CommandMenuModal idx -> case ev of
-      EvKey KEsc []        -> asModal .= NoModal
-      EvKey (KChar 'j') [] -> asModal .= CommandMenuModal (min (idx + 1) 5)
-      EvKey KDown []       -> asModal .= CommandMenuModal (min (idx + 1) 5)
-      EvKey (KChar 'k') [] -> asModal .= CommandMenuModal (max (idx - 1) 0)
-      EvKey KUp []         -> asModal .= CommandMenuModal (max (idx - 1) 0)
-      EvKey KEnter []      -> do
-        asModal .= NoModal
-        executeCommand idx
-      _                    -> pure ()
+-- | Handle help modal - any key dismisses
+handleHelpModal :: Event -> EventM Name AppState ()
+handleHelpModal ev = case ev of
+  EvKey _ _ -> asModal .= NoModal
+  _         -> pure ()
 
-    ConfirmQuitModal -> case ev of
-      EvKey (KChar 'y') [] -> halt
-      EvKey (KChar 'Y') [] -> halt
-      EvKey (KChar 'n') [] -> asModal .= NoModal
-      EvKey (KChar 'N') [] -> asModal .= NoModal
-      EvKey KEsc []        -> asModal .= NoModal
-      _                    -> pure ()
+-- | Handle command menu modal navigation and selection
+handleCommandMenuModal :: Event -> Int -> EventM Name AppState ()
+handleCommandMenuModal ev idx = case ev of
+  EvKey KEsc []        -> asModal .= NoModal
+  EvKey (KChar 'j') [] -> asModal .= CommandMenuModal (min (idx + 1) (commandCount - 1))
+  EvKey KDown []       -> asModal .= CommandMenuModal (min (idx + 1) (commandCount - 1))
+  EvKey (KChar 'k') [] -> asModal .= CommandMenuModal (max (idx - 1) 0)
+  EvKey KUp []         -> asModal .= CommandMenuModal (max (idx - 1) 0)
+  EvKey KEnter []      -> do
+    asModal .= NoModal
+    case safeIndex allCommands idx of
+      Just cmd -> executeCommand cmd
+      Nothing  -> pure ()
+  _                    -> pure ()
 
-    SettingsModal -> case ev of
-      EvKey KEsc []        -> asModal .= NoModal
-      EvKey (KChar 's') [] -> do
-        -- Save settings (currently just updates language module in state)
-        appState <- get
-        let langMod = _asLangModule appState
-        -- Reload language module with new level
-        liftIO $ do
-          result <- loadLanguageModule (languageId (languageInfo langMod))
-          case result of
-            Right newLangMod -> writeBChan (_asEventChannel appState) (EvLanguageReloaded newLangMod)
-            Left _ -> pure ()
-        asModal .= NoModal
-      EvKey (KChar 'r') [] -> do
-        -- Reload config file
-        appState <- get
-        liftIO $ do
-          result <- loadConfig
-          case result of
-            Right newConfig -> writeBChan (_asEventChannel appState) (EvConfigReloaded newConfig)
-            Left _ -> pure ()  -- On error, silently fail (could show error modal)
-        asModal .= NoModal
-      EvKey (KChar 'e') [] -> do
-        -- Edit prompts - show system prompt for current mode
-        settingsState <- get
-        let langMod = _asLangModule settingsState
-            mode = _asCurrentMode settingsState
-        case getSystemPrompt langMod mode of
-          Just prompt -> asModal .= PromptPreviewModal prompt
-          Nothing -> pure ()  -- No system prompt defined
-      -- Allow cycling through learner levels with +/- keys
-      EvKey (KChar '+') [] -> cycleLearnerLevel 1
-      EvKey (KChar '-') [] -> cycleLearnerLevel (-1)
-      EvKey (KChar '=') [] -> cycleLearnerLevel 1  -- Same as + (shift+key)
-      _                    -> pure ()
+-- | Handle confirm quit modal
+handleConfirmQuitModal :: Event -> EventM Name AppState ()
+handleConfirmQuitModal ev = case ev of
+  EvKey (KChar 'y') [] -> halt
+  EvKey (KChar 'Y') [] -> halt
+  EvKey (KChar 'n') [] -> asModal .= NoModal
+  EvKey (KChar 'N') [] -> asModal .= NoModal
+  EvKey KEsc []        -> asModal .= NoModal
+  _                    -> pure ()
 
-    CardPreviewModal card -> case ev of
-      EvKey KEsc []        -> asModal .= NoModal
-      EvKey KEnter []      -> do
-        -- Push card to Anki
-        let ankiClient = _asAnkiClient st
-            conn = _asDbConnection st
-            chan = _asEventChannel st
+-- | Handle settings modal
+handleSettingsModal :: Event -> EventM Name AppState ()
+handleSettingsModal ev = case ev of
+  EvKey KEsc []        -> asModal .= NoModal
+  EvKey (KChar 's') [] -> do
+    -- Save settings (currently just updates language module in state)
+    appState <- get
+    let langMod = _asLangModule appState
+    -- Reload language module with new level
+    liftIO $ do
+      result <- loadLanguageModule (languageId (languageInfo langMod))
+      case result of
+        Right newLangMod -> writeBChan (_asEventChannel appState) (EvLanguageReloaded newLangMod)
+        Left _ -> pure ()
+    asModal .= NoModal
+  EvKey (KChar 'r') [] -> do
+    -- Reload config file
+    appState <- get
+    liftIO $ do
+      result <- loadConfig
+      case result of
+        Right newConfig -> writeBChan (_asEventChannel appState) (EvConfigReloaded newConfig)
+        Left _ -> pure ()
+    asModal .= NoModal
+  EvKey (KChar 'e') [] -> do
+    -- Edit prompts - show system prompt for current mode
+    settingsState <- get
+    let langMod = _asLangModule settingsState
+        mode = _asCurrentMode settingsState
+    case getSystemPrompt langMod mode of
+      Just prompt -> asModal .= PromptPreviewModal prompt
+      Nothing -> pure ()
+  -- Allow cycling through learner levels with +/- keys
+  EvKey (KChar '+') [] -> cycleLearnerLevel 1
+  EvKey (KChar '-') [] -> cycleLearnerLevel (-1)
+  EvKey (KChar '=') [] -> cycleLearnerLevel 1  -- Same as + (shift+key)
+  _                    -> pure ()
 
-        -- Convert AnkiCard to AnkiNote for the API
-        let note = AnkiNote
-              { anDeckName  = cardDeck card
-              , anModelName = "Basic"  -- Standard Anki note type
-              , anFront     = cardFront card
-              , anBack      = cardBack card
-              , anTags      = cardTags card
-              , anOptions   = defaultNoteOptions
-              }
+-- | Handle card preview modal
+handleCardPreviewModal :: Event -> AnkiCard -> EventM Name AppState ()
+handleCardPreviewModal ev card = case ev of
+  EvKey KEsc []        -> asModal .= NoModal
+  EvKey KEnter []      -> do
+    -- Push card to Anki
+    st <- get
+    let ankiClient = _asAnkiClient st
+        conn = _asDbConnection st
+        chan = _asEventChannel st
 
-        -- Push to Anki asynchronously
-        liftIO $ void $ forkIO $ do
-          result <- addNote ankiClient note
-          case result of
-            Right noteId -> do
-              -- Mark card as pushed in database
-              case cardId card of
-                Just cid -> void $ markCardPushed conn cid noteId
-                Nothing  -> pure ()
-              writeBChan chan (EvCardPushResult (Right noteId))
-            Left err ->
-              writeBChan chan (EvCardPushResult (Left err))
+    -- Convert AnkiCard to AnkiNote for the API
+    let note = AnkiNote
+          { anDeckName  = cardDeck card
+          , anModelName = "Basic"  -- Standard Anki note type
+          , anFront     = cardFront card
+          , anBack      = cardBack card
+          , anTags      = cardTags card
+          , anOptions   = defaultNoteOptions
+          }
 
-        -- Close modal (result will come via EvCardPushResult)
-        asModal .= NoModal
-      EvKey (KChar 'd') [] -> do
-        asPendingCard .= Nothing
-        asModal .= NoModal
-      _                    -> pure ()
+    -- Push to Anki asynchronously
+    liftIO $ void $ forkIO $ do
+      result <- addNote ankiClient note
+      case result of
+        Right noteId -> do
+          -- Mark card as pushed in database
+          case cardId card of
+            Just cid -> void $ markCardPushed conn cid noteId
+            Nothing  -> pure ()
+          writeBChan chan (EvCardPushResult (Right noteId))
+        Left err ->
+          writeBChan chan (EvCardPushResult (Left err))
 
-    SessionsModal sums idx -> case ev of
-      EvKey KEsc []        -> asModal .= NoModal
-      EvKey (KChar 'j') [] -> asModal .= SessionsModal sums (min (idx + 1) (length sums - 1))
-      EvKey KDown []       -> asModal .= SessionsModal sums (min (idx + 1) (length sums - 1))
-      EvKey (KChar 'k') [] -> asModal .= SessionsModal sums (max (idx - 1) 0)
-      EvKey KUp []         -> asModal .= SessionsModal sums (max (idx - 1) 0)
-      EvKey KEnter [] -> do
-        when (idx >= 0 && idx < length sums) $ do
-          let selectedSummary = sums !! idx
-              sid = summaryId selectedSummary
-              conn = _asDbConnection st
-              chan = _asEventChannel st
+    -- Close modal (result will come via EvCardPushResult)
+    asModal .= NoModal
+  EvKey (KChar 'd') [] -> do
+    asPendingCard .= Nothing
+    asModal .= NoModal
+  _                    -> pure ()
 
-          -- Load messages for the selected session asynchronously
-          liftIO $ void $ forkIO $ do
-            result <- getSessionMessages conn sid
-            case result of
-              Right msgs -> writeBChan chan (EvMessagesLoaded msgs)
-              Left _ -> writeBChan chan (EvMessagesLoaded [])
+-- | Handle sessions modal
+handleSessionsModal :: Event -> [SessionSummary] -> Int -> EventM Name AppState ()
+handleSessionsModal ev sums idx = case ev of
+  EvKey KEsc []        -> asModal .= NoModal
+  EvKey (KChar 'j') [] -> asModal .= SessionsModal sums (min (idx + 1) (length sums - 1))
+  EvKey KDown []       -> asModal .= SessionsModal sums (min (idx + 1) (length sums - 1))
+  EvKey (KChar 'k') [] -> asModal .= SessionsModal sums (max (idx - 1) 0)
+  EvKey KUp []         -> asModal .= SessionsModal sums (max (idx - 1) 0)
+  EvKey KEnter []      -> handleSessionSelect sums idx
+  EvKey (KChar 'd') [] -> handleSessionDelete sums idx
+  EvKey (KChar 'n') [] -> handleSessionNew
+  _                    -> pure ()
 
-          -- Update session info in state immediately
-          now <- liftIO getCurrentTime
-          let newSession = Session
-                { sessionId = sid
-                , sessionLanguageId = summaryLanguageId selectedSummary
-                , sessionMode = summaryMode selectedSummary
-                , sessionLearnerLevel = learnerLevel (_asLangModule st)
-                , sessionCreatedAt = now  -- Not accurate but placeholder
-                , sessionUpdatedAt = summaryLastActivity selectedSummary
-                , sessionTitle = Just (summaryTitle selectedSummary)
-                , sessionActive = True
-                }
-          asSession .= newSession
-          asCurrentMode .= summaryMode selectedSummary
-          asMessages .= []  -- Will be populated by EvMessagesLoaded
-          asModal .= NoModal
-      EvKey (KChar 'd') [] -> do
-        -- Delete selected session
-        when (idx >= 0 && idx < length sums) $ do
-          let selectedSummary = sums !! idx
-              sid = summaryId selectedSummary
-              conn = _asDbConnection st
-              appStateChan = _asEventChannel st
-          -- Delete session asynchronously
-          liftIO $ void $ forkIO $ do
-            _ <- deleteSession conn sid
-            -- Reload sessions list
-            result <- getRecentSessions conn 50
-            case result of
-              Right sessionsWithCount ->
-                writeBChan appStateChan (EvSessionsLoaded (map sessionToSummary sessionsWithCount))
-              Left _ ->
-                writeBChan appStateChan (EvSessionsLoaded [])
-          asModal .= NoModal
-      EvKey (KChar 'n') [] -> do
-        -- Create new session and close modal
-        newState <- get
-        let langMod = _asLangModule newState
-            conn = _asDbConnection newState
-        newSid <- liftIO $ UUID.toText <$> nextRandom
-        now <- liftIO getCurrentTime
-        let newSession = Session
-              { sessionId          = newSid
-              , sessionLanguageId  = languageId (languageInfo langMod)
-              , sessionMode        = _asCurrentMode newState
-              , sessionLearnerLevel = learnerLevel langMod
-              , sessionCreatedAt   = now
-              , sessionUpdatedAt   = now
-              , sessionTitle       = Nothing
-              , sessionActive      = True
-              }
+-- | Handle session selection
+handleSessionSelect :: [SessionSummary] -> Int -> EventM Name AppState ()
+handleSessionSelect sums idx =
+  case safeIndex sums idx of
+    Nothing -> pure ()
+    Just selectedSummary -> do
+      st <- get
+      let sid = summaryId selectedSummary
+          conn = _asDbConnection st
+          chan = _asEventChannel st
 
-        -- Persist new session to database
-        liftIO $ void $ createSession conn newSession
+      -- Load messages for the selected session asynchronously
+      liftIO $ void $ forkIO $ do
+        result <- getSessionMessages conn sid
+        case result of
+          Right msgs -> writeBChan chan (EvMessagesLoaded msgs)
+          Left _ -> writeBChan chan (EvMessagesLoaded [])
 
-        asSession .= newSession
-        asMessages .= []
-        asInputEditor .= mkInputEditor
-        asModal .= NoModal
-      _                    -> pure ()
+      -- Update session info in state immediately
+      now <- liftIO getCurrentTime
+      let newSession = Session
+            { sessionId = sid
+            , sessionLanguageId = summaryLanguageId selectedSummary
+            , sessionMode = summaryMode selectedSummary
+            , sessionLearnerLevel = learnerLevel (_asLangModule st)
+            , sessionCreatedAt = now
+            , sessionUpdatedAt = summaryLastActivity selectedSummary
+            , sessionTitle = Just (summaryTitle selectedSummary)
+            , sessionActive = True
+            }
+      asSession .= newSession
+      asCurrentMode .= summaryMode selectedSummary
+      asMessages .= []
+      asModal .= NoModal
 
-    ErrorModal _ -> case ev of
-      EvKey _ _ -> asModal .= NoModal
-      _         -> pure ()
+-- | Handle session deletion
+handleSessionDelete :: [SessionSummary] -> Int -> EventM Name AppState ()
+handleSessionDelete sums idx =
+  case safeIndex sums idx of
+    Nothing -> pure ()
+    Just selectedSummary -> do
+      st <- get
+      let sid = summaryId selectedSummary
+          conn = _asDbConnection st
+          chan = _asEventChannel st
+      -- Delete session asynchronously
+      liftIO $ void $ forkIO $ do
+        _ <- deleteSession conn sid
+        -- Reload sessions list
+        result <- getRecentSessions conn 50
+        case result of
+          Right sessionsWithCount ->
+            writeBChan chan (EvSessionsLoaded (map sessionToSummary sessionsWithCount))
+          Left _ ->
+            writeBChan chan (EvSessionsLoaded [])
+      asModal .= NoModal
 
-    PromptPreviewModal _ -> case ev of
-      EvKey _ _ -> asModal .= NoModal
-      _         -> pure ()
+-- | Handle new session creation from sessions modal
+handleSessionNew :: EventM Name AppState ()
+handleSessionNew = do
+  st <- get
+  let langMod = _asLangModule st
+      conn = _asDbConnection st
+  newSid <- liftIO $ UUID.toText <$> nextRandom
+  now <- liftIO getCurrentTime
+  let newSession = Session
+        { sessionId          = newSid
+        , sessionLanguageId  = languageId (languageInfo langMod)
+        , sessionMode        = _asCurrentMode st
+        , sessionLearnerLevel = learnerLevel langMod
+        , sessionCreatedAt   = now
+        , sessionUpdatedAt   = now
+        , sessionTitle       = Nothing
+        , sessionActive      = True
+        }
 
-    NoModal -> pure ()
+  -- Persist new session to database
+  liftIO $ void $ createSession conn newSession
+
+  asSession .= newSession
+  asMessages .= []
+  asInputEditor .= mkInputEditor
+  asModal .= NoModal
+
+-- | Handle dismissable modals (any key closes)
+handleDismissableModal :: Event -> EventM Name AppState ()
+handleDismissableModal ev = case ev of
+  EvKey _ _ -> asModal .= NoModal
+  _         -> pure ()
 
 -- | Cycle through learner levels
 cycleLearnerLevel :: Int -> EventM Name AppState ()
@@ -727,7 +765,7 @@ cycleLearnerLevel delta = do
       currentIdx = case currentLevel of
         A1 -> 0; A2 -> 1; B1 -> 2; B2 -> 3; C1 -> 4; C2 -> 5
       newIdx = (currentIdx + delta) `mod` length levels
-      newLevel = levels !! newIdx
+      newLevel = safeIndexWithDefault A1 levels newIdx
       newLangMod = langMod { learnerLevel = newLevel }
   asLangModule .= newLangMod
 
@@ -740,21 +778,13 @@ cycleMode delta = do
         Just i  -> i
         Nothing -> 0
       newIdx = (currentIdx + delta) `mod` length modes
-      newMode = modes !! newIdx
+      newMode = safeIndexWithDefault Conversation modes newIdx
   asCurrentMode .= newMode
-  where
-    elemIndex x xs = go 0 xs
-      where
-        go _ [] = Nothing
-        go i (y:ys)
-          | x == y    = Just i
-          | otherwise = go (i + 1) ys
 
--- | Execute a command from the command menu by index
--- Commands: 0=New Session, 1=Session List, 2=Settings, 3=Show Card, 4=Help, 5=Quit
-executeCommand :: Int -> EventM Name AppState ()
-executeCommand cmdIdx = case cmdIdx of
-  0 -> do  -- New Session
+-- | Execute a command
+executeCommand :: Command -> EventM Name AppState ()
+executeCommand cmd = case cmd of
+  CmdNewSession -> do
     st <- get
     let langMod = _asLangModule st
         conn = _asDbConnection st
@@ -775,7 +805,7 @@ executeCommand cmdIdx = case cmdIdx of
     asMessages .= []
     asInputEditor .= mkInputEditor
 
-  1 -> do  -- Session List
+  CmdSessionList -> do
     st <- get
     let conn = _asDbConnection st
         chan = _asEventChannel st
@@ -789,22 +819,20 @@ executeCommand cmdIdx = case cmdIdx of
           writeBChan chan (EvSessionsLoaded [])
     asModal .= SessionsModal [] 0
 
-  2 -> do  -- Settings
+  CmdSettings ->
     asModal .= SettingsModal
 
-  3 -> do  -- Show Card
+  CmdShowCard -> do
     st <- get
     case _asPendingCard st of
       Just card -> asModal .= CardPreviewModal card
       Nothing   -> pure ()
 
-  4 -> do  -- Help
+  CmdHelp ->
     asModal .= HelpModal
 
-  5 -> do  -- Quit
+  CmdQuit ->
     asModal .= ConfirmQuitModal
-
-  _ -> pure ()  -- Unknown command, do nothing
 
 -- ════════════════════════════════════════════════════════════════
 -- LLM INTERACTION
@@ -862,7 +890,7 @@ sessionToSummary (sess, count) = SessionSummary
 extractCardFromResponse :: T.Text -> T.Text -> Maybe Int -> T.Text -> UTCTime -> Maybe AnkiCard
 extractCardFromResponse langId sessionId' sourceMsgId response now =
   -- Try parsing patterns in order of preference
-  tryJsonFormat `orElse` tryLabeledFormat `orElse` trySimpleFormat
+  tryJsonFormat <|> tryLabeledFormat <|> trySimpleFormat
   where
     -- Try to parse JSON format
     tryJsonFormat :: Maybe AnkiCard
@@ -949,11 +977,6 @@ extractCardFromResponse langId sessionId' sourceMsgId response now =
       , cardPushedAt    = Nothing
       , cardCreatedAt   = now
       }
-  
-    -- Helper for Maybe alternation
-    orElse :: Maybe a -> Maybe a -> Maybe a
-    orElse Nothing b = b
-    orElse a       _ = a
 
 -- | Convert CardResponse to AnkiCard (for structured response)
 cardResponseToAnkiCard :: CardResponse -> T.Text -> T.Text -> UTCTime -> AnkiCard

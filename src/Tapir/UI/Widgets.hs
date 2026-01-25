@@ -20,6 +20,10 @@ module Tapir.UI.Widgets
   , paddedText
   , labeledRow
 
+    -- * Text Wrapping
+  , wrapTextToWidth
+  , wrapTextDynamic
+
     -- * Separators
   , horizontalSeparator
   , verticalSeparator
@@ -35,6 +39,10 @@ module Tapir.UI.Widgets
     -- * Modals
   , modalBox
   , dialogBox
+
+    -- * Safe List Operations
+  , safeIndex
+  , safeIndexWithDefault
   ) where
 
 import Brick
@@ -43,6 +51,7 @@ import Brick.Widgets.Border.Style
 import Brick.Widgets.Center
 import Data.Text (Text)
 import qualified Data.Text as T
+import Lens.Micro ((^.))
 import Text.Wrap (wrapText, defaultWrapSettings, WrapSettings(..))
 
 import Tapir.UI.Attrs
@@ -62,11 +71,11 @@ titledBox title content =
 -- | Box with a title, highlighted when focused
 titledBoxFocused :: Bool -> Text -> Widget Name -> Widget Name
 titledBoxFocused focused title content =
-  let borderAttr = if focused then attrBorderFocus else attrBorder
-      titleAttr  = if focused then attrTitleFocus else attrTitle
-  in withAttr borderAttr $
+  let borderStyle = if focused then attrBorderFocus else attrBorder
+      titleStyle  = if focused then attrTitleFocus else attrTitle
+  in withAttr borderStyle $
      withBorderStyle unicode $
-     borderWithLabel (withAttr titleAttr $ txt $ " " <> title <> " ") $
+     borderWithLabel (withAttr titleStyle $ txt $ " " <> title <> " ") $
      content
 
 -- | Simple box without title
@@ -134,7 +143,8 @@ loadingSpinner :: Int -> Widget Name
 loadingSpinner tick =
   let frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
       idx = tick `mod` length frames
-      char = frames !! idx
+      -- Safe: idx is always valid due to mod, but we use safe access anyway
+      char = safeIndexWithDefault '⠋' frames idx
   in withAttr attrStreaming $ txt (T.singleton char)
 
 -- ════════════════════════════════════════════════════════════════
@@ -183,3 +193,65 @@ dialogBox title content actions =
     , hBorder
     , padTop (Pad 1) $ hCenter $ keyHintRow actions
     ]
+
+-- ════════════════════════════════════════════════════════════════
+-- TEXT WRAPPING
+-- ════════════════════════════════════════════════════════════════
+
+-- | Wrap text to a given width, returning multiple lines.
+-- Handles word boundaries and preserves existing newlines.
+wrapTextToWidth :: Int -> Text -> [Text]
+wrapTextToWidth width content
+  | width <= 0 = [content]
+  | T.null content = [""]
+  | otherwise  = concatMap (wrapLine width) (T.lines content)
+  where
+    wrapLine :: Int -> Text -> [Text]
+    wrapLine w line
+      | T.length line <= w = [line]
+      | otherwise = wrapWords w (T.words line) [] ""
+
+    wrapWords :: Int -> [Text] -> [Text] -> Text -> [Text]
+    wrapWords _ [] acc current =
+      if T.null current then acc else acc ++ [current]
+    wrapWords w (word:rest) acc current
+      | T.null current =
+          if T.length word > w
+            then let (pre, post) = T.splitAt w word
+                 in wrapWords w (post:rest) (acc ++ [pre]) ""
+            else wrapWords w rest acc word
+      | T.length current + 1 + T.length word <= w =
+          wrapWords w rest acc (current <> " " <> word)
+      | otherwise =
+          if T.length word > w
+            then let (pre, post) = T.splitAt w word
+                 in wrapWords w (post:rest) (acc ++ [current, pre]) ""
+            else wrapWords w rest (acc ++ [current]) word
+
+-- | Wrap text dynamically based on available viewport width.
+-- Must be Greedy horizontally to properly fill available space before wrapping.
+wrapTextDynamic :: Text -> Widget Name
+wrapTextDynamic t = Widget Greedy Fixed $ do
+    ctx <- getContext
+    let availWidth = max 20 (ctx ^. availWidthL - 2)
+        wrapped = wrapTextToWidth availWidth t
+    render $ vBox $ map txt wrapped
+
+-- ════════════════════════════════════════════════════════════════
+-- SAFE LIST OPERATIONS
+-- ════════════════════════════════════════════════════════════════
+
+-- | Safe list indexing, returns Nothing for out-of-bounds
+safeIndex :: [a] -> Int -> Maybe a
+safeIndex [] _ = Nothing
+safeIndex (x:_) 0 = Just x
+safeIndex (_:xs) n
+  | n < 0     = Nothing
+  | otherwise = safeIndex xs (n - 1)
+
+-- | Safe list indexing with default value
+safeIndexWithDefault :: a -> [a] -> Int -> a
+safeIndexWithDefault def xs n =
+  case safeIndex xs n of
+    Just x  -> x
+    Nothing -> def

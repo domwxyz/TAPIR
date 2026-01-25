@@ -22,11 +22,11 @@ module Tapir.UI.Structured
 import Brick
 import Data.Text (Text)
 import qualified Data.Text as T
-import Lens.Micro ((^.))
 
 import Tapir.Types.Response
 import Tapir.UI.Types (Name)
 import Tapir.UI.Attrs
+import Tapir.UI.Widgets (wrapTextDynamic)
 
 -- ════════════════════════════════════════════════════════════════
 -- MAIN DISPATCHER
@@ -47,52 +47,8 @@ renderRawText content =
   padBottom (Pad 1) $
   vBox
     [ withAttr attrAssistantLabel $ txt "TAPIR"
-    , padLeft (Pad 2) $ txtWrapWords content
+    , padLeft (Pad 2) $ wrapTextDynamic content
     ]
-
--- | Wrap text to a given width, returning multiple lines
--- Handles word boundaries and preserves existing newlines
-wrapTextToWidth :: Int -> Text -> [Text]
-wrapTextToWidth width content
-  | width <= 0 = [content]
-  | T.null content = [""]
-  | otherwise  = concatMap (wrapLine width) (T.lines content)
-  where
-    wrapLine :: Int -> Text -> [Text]
-    wrapLine w line
-      | T.length line <= w = [line]
-      | otherwise = wrapWords w (T.words line) [] ""
-
-    wrapWords :: Int -> [Text] -> [Text] -> Text -> [Text]
-    wrapWords _ [] acc current =
-      if T.null current then acc else acc ++ [current]
-    wrapWords w (word:rest) acc current
-      | T.null current =
-          if T.length word > w
-            then let (pre, post) = T.splitAt w word
-                 in wrapWords w (post:rest) (acc ++ [pre]) ""
-            else wrapWords w rest acc word
-      | T.length current + 1 + T.length word <= w =
-          wrapWords w rest acc (current <> " " <> word)
-      | otherwise =
-          if T.length word > w
-            then let (pre, post) = T.splitAt w word
-                 in wrapWords w (post:rest) (acc ++ [current, pre]) ""
-            else wrapWords w rest (acc ++ [current]) word
-
--- | Helper to wrap text in a viewport-safe way using Widget monad
--- Uses the available context width to wrap text dynamically
--- NOTE: Must be Greedy horizontally to properly fill available space before wrapping
-wrapTextDynamic :: Text -> Widget Name
-wrapTextDynamic t = Widget Greedy Fixed $ do
-    ctx <- getContext
-    let availWidth = max 20 (ctx ^. availWidthL - 2)
-        wrapped = wrapTextToWidth availWidth t
-    render $ vBox $ map txt wrapped
-
--- | Simple text wrap for display in viewports (fallback, uses dynamic)
-txtWrapWords :: Text -> Widget Name
-txtWrapWords = wrapTextDynamic
 
 -- ════════════════════════════════════════════════════════════════
 -- CONVERSATION MODE
@@ -104,7 +60,7 @@ renderConversation ConversationResponse{..} =
   vBox $
     -- Main reply
     [ withAttr attrAssistantLabel $ txt "TAPIR"
-    , padLeft (Pad 2) $ withAttr attrAssistantMessage $ txtWrapWords convReply
+    , padLeft (Pad 2) $ withAttr attrAssistantMessage $ wrapTextDynamic convReply
     ]
     -- Inline corrections (if any) - show prominently when user made mistakes
     ++ renderInlineCorrections convCorrections
@@ -137,15 +93,15 @@ renderInlineCorrections corrs =
 
     renderGroupedCorrection ((original, fixed), explanations) =
       -- Render original and fixed on separate lines so long text can wrap
-      [ padLeft (Pad 2) $ withAttr attrError $ txtWrapWords $ "✗ " <> original
+      [ padLeft (Pad 2) $ withAttr attrError $ wrapTextDynamic $ "✗ " <> original
       , padLeft (Pad 4) $ hBox
           [ withAttr attrSuccess $ txt "→ "
-          , withAttr attrSuccess $ txtWrapWords fixed
+          , withAttr attrSuccess $ wrapTextDynamic fixed
           ]
       ] ++ map renderExplanation explanations
 
     renderExplanation expl =
-      padLeft (Pad 4) $ withAttr attrTimestamp $ txtWrapWords $ "· " <> expl
+      padLeft (Pad 4) $ withAttr attrTimestamp $ wrapTextDynamic $ "· " <> expl
 
 -- | Render compact vocabulary (each item on its own line for wrapping)
 renderCompactVocab :: [VocabHighlight] -> [Widget Name]
@@ -157,7 +113,7 @@ renderCompactVocab vocab =
      ] ++ map renderVocabLine limited
   where
     renderVocabLine VocabHighlight{..} =
-      padLeft (Pad 4) $ txtWrapWords $ vhWord <> " = " <> vhTranslation
+      padLeft (Pad 4) $ wrapTextDynamic $ vhWord <> " = " <> vhTranslation
 
 -- | Render grammar tip (with text wrapping)
 renderGrammarTip :: Maybe Text -> [Widget Name]
@@ -165,7 +121,7 @@ renderGrammarTip Nothing = []
 renderGrammarTip (Just tip) =
   [ txt " "
   , padLeft (Pad 2) $ withAttr attrTimestamp $ txt "Tip:"
-  , padLeft (Pad 4) $ withAttr attrSystemMessage $ txtWrapWords tip
+  , padLeft (Pad 4) $ withAttr attrSystemMessage $ wrapTextDynamic tip
   ]
 
 -- ════════════════════════════════════════════════════════════════
@@ -194,10 +150,10 @@ renderPerfectScore mEnc =
 renderCorrections :: Text -> Text -> [Correction] -> Maybe Text -> Maybe Text -> [Widget Name]
 renderCorrections original corrected corrections mEnc mNote =
   [ withAttr attrSectionHeader $ txt "Original:"
-  , padLeft (Pad 2) $ withAttr attrError $ txtWrapWords original
+  , padLeft (Pad 2) $ withAttr attrError $ wrapTextDynamic original
   , txt " "
   , withAttr attrSectionHeader $ txt "Corrected:"
-  , padLeft (Pad 2) $ withAttr attrSuccess $ txtWrapWords corrected
+  , padLeft (Pad 2) $ withAttr attrSuccess $ wrapTextDynamic corrected
   ]
   ++ (if null corrections then [] else
       [ txt " "
@@ -211,7 +167,7 @@ renderCorrections original corrected corrections mEnc mNote =
       [ txt " "
       , withAttr attrSectionDivider $ txt "─────────────────"
       , txt " "
-      , padLeft (Pad 2) $ withAttr attrTimestamp $ txtWrapWords note
+      , padLeft (Pad 2) $ withAttr attrTimestamp $ wrapTextDynamic note
       ]) mNote
   ++ maybe [] (\enc ->
       [ txt " "
@@ -231,7 +187,7 @@ renderCorrectionItem Correction{..} =
         ]
         ++ maybe [] (\cat -> [txt $ " [" <> categoryText cat <> "]"]) corrCategory
         ++ maybe [] (\sev -> [withAttr (severityAttr sev) $ txt $ " (" <> sev <> ")"]) corrSeverity
-    , padLeft (Pad 4) $ withAttr attrTimestamp $ txtWrapWords corrExplanation
+    , padLeft (Pad 4) $ withAttr attrTimestamp $ wrapTextDynamic corrExplanation
     ]
   where
     categoryText :: CorrectionCategory -> Text
@@ -266,14 +222,14 @@ renderTranslation TranslationResponse{..} =
     , hBox
         [ withAttr attrSectionHeader $ txt $ trSourceLang <> ": "
         ]
-    , padLeft (Pad 2) $ txtWrapWords trSourceText
+    , padLeft (Pad 2) $ wrapTextDynamic trSourceText
     , txt " "
     -- Target
     , hBox
         [ withAttr attrSectionHeader $ txt $ trTargetLang <> ": "
         , maybe emptyWidget renderFormality trFormality
         ]
-    , padLeft (Pad 2) $ withAttr attrSuccess $ txtWrapWords trTargetText
+    , padLeft (Pad 2) $ withAttr attrSuccess $ wrapTextDynamic trTargetText
     ]
     -- Literal meaning (if different)
     ++ maybe [] (\lit ->
@@ -325,7 +281,7 @@ renderTranslationNotes notes =
         [ hBox
             [ withAttr attrModalKey $ txt $ "\"" <> tnPhrase <> "\""
             , txt ": "
-            , txtWrapWords tnExplanation
+            , wrapTextDynamic tnExplanation
             ]
         ]
         ++ maybe [] (\c -> [txt " ", padLeft (Pad 2) $ withAttr attrTimestamp $ wrapTextDynamic $ "Cultural: " <> c]) tnCultural
@@ -346,7 +302,7 @@ renderCardPreview CardResponse{..} =
     , txt " "
     -- Back
     , withAttr attrSectionHeader $ txt "Back:"
-    , padLeft (Pad 2) $ withAttr attrCardBack $ txtWrapWords cardRespBack
+    , padLeft (Pad 2) $ withAttr attrCardBack $ wrapTextDynamic cardRespBack
     ]
     -- Pronunciation
     ++ maybe [] (\p ->
@@ -372,14 +328,14 @@ renderCardPreview CardResponse{..} =
         [ txt " "
         , withAttr attrSectionHeader $ txt "Notes:"
         , txt " "
-        , padLeft (Pad 2) $ withAttr attrTimestamp $ txtWrapWords n
+        , padLeft (Pad 2) $ withAttr attrTimestamp $ wrapTextDynamic n
         ]) cardRespNotes
     -- Mnemonic
     ++ maybe [] (\m ->
         [ txt " "
         , padLeft (Pad 2) $ hBox
             [ withAttr attrStatusModeActive $ txt "💡 "
-            , withAttr attrSystemMessage $ txtWrapWords m
+            , withAttr attrSystemMessage $ wrapTextDynamic m
             ]
         ]) cardRespMnemonic
     -- Related words

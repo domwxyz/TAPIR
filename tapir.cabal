@@ -55,6 +55,7 @@ library
     Tapir.Client.LLM.OpenRouter
     Tapir.Client.LLM.OpenAI
     Tapir.Client.LLM.Ollama
+    Tapir.Client.LLM.SSE
     Tapir.Client.LLM.Tools
     Tapir.Client.LLM.Request
     Tapir.Client.LLM.Response

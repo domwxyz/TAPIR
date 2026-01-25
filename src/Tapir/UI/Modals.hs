@@ -34,7 +34,7 @@ import qualified Data.Text as T
 import Data.Time (formatTime, defaultTimeLocale)
 
 import Tapir.Types
-import Tapir.UI.Types
+import Tapir.UI.Types (Name(..), Modal(..), AppState(..), SessionSummary(..), Command(..), allCommands, commandName, commandKeybind)
 import Tapir.UI.Attrs
 import Tapir.UI.Widgets (keyHintRow)
 
@@ -106,24 +106,6 @@ renderKeybind key desc =
 -- COMMAND MENU MODAL
 -- ════════════════════════════════════════════════════════════════
 
--- | Command definition with name, keybind, and description
-data Command = Command
-  { cmdName    :: !Text
-  , cmdKeybind :: !Text
-  , cmdDesc    :: !Text
-  }
-
--- | All available commands in the menu
-commands :: [Command]
-commands =
-  [ Command "New Session"    "Ctrl+N" "Start a fresh conversation"
-  , Command "Session List"   "Ctrl+S" "Browse and switch sessions"
-  , Command "Settings"       "F2"     "Open settings panel"
-  , Command "Show Card"      "Ctrl+A" "View pending Anki card"
-  , Command "Help"           "F1"     "Show all keybindings"
-  , Command "Quit"           "Ctrl+Q" "Exit TAPIR"
-  ]
-
 -- | Render command menu modal
 renderCommandMenuModal :: Int -> Widget Name
 renderCommandMenuModal selectedIdx =
@@ -134,7 +116,7 @@ renderCommandMenuModal selectedIdx =
   padAll 1 $
   hLimit 40 $
   vBox
-    [ vBox $ zipWith (renderCommandRow selectedIdx) [0..] commands
+    [ vBox $ zipWith (renderCommandRow selectedIdx) [0..] allCommands
     , txt " "
     , hBorder
     , padTop (Pad 1) $ hCenter $ keyHintRow
@@ -146,15 +128,15 @@ renderCommandMenuModal selectedIdx =
 
 -- | Render a single command row
 renderCommandRow :: Int -> Int -> Command -> Widget Name
-renderCommandRow selectedIdx idx Command{..} =
+renderCommandRow selectedIdx idx cmd =
   let isSelected = selectedIdx == idx
       attr = if isSelected then attrStatusModeActive else attrModalDescription
       prefix = if isSelected then "> " else "  "
   in withAttr attr $
      hBox
        [ txt prefix
-       , txt cmdName
-       , padLeft Max $ withAttr attrHelpKey $ txt cmdKeybind
+       , txt (commandName cmd)
+       , padLeft Max $ withAttr attrHelpKey $ txt (commandKeybind cmd)
        ]
 
 -- ════════════════════════════════════════════════════════════════

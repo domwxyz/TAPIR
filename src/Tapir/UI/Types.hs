@@ -25,6 +25,14 @@ module Tapir.UI.Types
     -- * Modals
   , Modal(..)
 
+    -- * Commands
+  , Command(..)
+  , commandName
+  , commandKeybind
+  , commandDescription
+  , allCommands
+  , commandCount
+
     -- * Request State
   , RequestState(..)
   , isStreaming
@@ -109,7 +117,7 @@ data Focus
 data Modal
   = NoModal                          -- ^ No modal visible
   | HelpModal                        -- ^ Help/keybindings overlay
-  | CommandMenuModal !Int            -- ^ Command palette with selected index
+  | CommandMenuModal !Int            -- ^ Command palette with selected index into allCommands
   | SessionsModal ![SessionSummary] !Int  -- ^ Session list with current index
   | CardPreviewModal !AnkiCard       -- ^ Card preview/edit before push
   | SettingsModal                    -- ^ Settings dialog
@@ -117,6 +125,58 @@ data Modal
   | ConfirmQuitModal                 -- ^ Confirm quit dialog
   | ErrorModal !TapirError           -- ^ Error display modal
   deriving (Eq, Show)
+
+-- ════════════════════════════════════════════════════════════════
+-- COMMANDS
+-- ════════════════════════════════════════════════════════════════
+
+-- | Available commands in the command menu
+data Command
+  = CmdNewSession
+  | CmdSessionList
+  | CmdSettings
+  | CmdShowCard
+  | CmdHelp
+  | CmdQuit
+  deriving (Eq, Show, Enum, Bounded)
+
+-- | Get display name for a command
+commandName :: Command -> Text
+commandName = \case
+  CmdNewSession  -> "New Session"
+  CmdSessionList -> "Session List"
+  CmdSettings    -> "Settings"
+  CmdShowCard    -> "Show Card"
+  CmdHelp        -> "Help"
+  CmdQuit        -> "Quit"
+
+-- | Get keybinding for a command
+commandKeybind :: Command -> Text
+commandKeybind = \case
+  CmdNewSession  -> "Ctrl+N"
+  CmdSessionList -> "Ctrl+S"
+  CmdSettings    -> "F2"
+  CmdShowCard    -> "Ctrl+A"
+  CmdHelp        -> "F1"
+  CmdQuit        -> "Ctrl+Q"
+
+-- | Get description for a command
+commandDescription :: Command -> Text
+commandDescription = \case
+  CmdNewSession  -> "Start a fresh conversation"
+  CmdSessionList -> "Browse and switch sessions"
+  CmdSettings    -> "Open settings panel"
+  CmdShowCard    -> "View pending Anki card"
+  CmdHelp        -> "Show all keybindings"
+  CmdQuit        -> "Exit TAPIR"
+
+-- | All commands in menu order
+allCommands :: [Command]
+allCommands = [minBound .. maxBound]
+
+-- | Number of commands (for bounds checking)
+commandCount :: Int
+commandCount = length allCommands
 
 -- ════════════════════════════════════════════════════════════════
 -- REQUEST STATE

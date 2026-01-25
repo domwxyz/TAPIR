@@ -23,64 +23,21 @@ module Tapir.UI.Chat
 
 import Brick
 import Brick.Widgets.Center (hCenter)
+import Data.Maybe (isNothing)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time (UTCTime, formatTime, defaultTimeLocale)
-import Lens.Micro ((^.))
 
 import Tapir.Types (Role(..), Role, Message(..), messageRole)
 import Tapir.UI.Types
 import Tapir.UI.Attrs
 import Tapir.UI.Structured (renderStructuredResponse)
+import Tapir.UI.Widgets (wrapTextDynamic)
 
--- | Wrap text to a given width, returning multiple lines
--- Handles word boundaries and preserves existing newlines
-wrapTextToWidth :: Int -> Text -> [Text]
-wrapTextToWidth width content
-  | width <= 0 = [content]
-  | T.null content = [""]
-  | otherwise  = concatMap (wrapLine width) (T.lines content)
-  where
-    -- Wrap a single line (no newlines) to the given width
-    wrapLine :: Int -> Text -> [Text]
-    wrapLine w line
-      | T.length line <= w = [line]
-      | otherwise = wrapWords w (T.words line) [] ""
-
-    -- Wrap words accumulating into lines
-    wrapWords :: Int -> [Text] -> [Text] -> Text -> [Text]
-    wrapWords _ [] acc current =
-      if T.null current then acc else acc ++ [current]
-    wrapWords w (word:rest) acc current
-      | T.null current =
-          -- Starting a new line
-          if T.length word > w
-            -- Word is longer than width, break it
-            then let (pre, post) = T.splitAt w word
-                 in wrapWords w (post:rest) (acc ++ [pre]) ""
-            else wrapWords w rest acc word
-      | T.length current + 1 + T.length word <= w =
-          -- Word fits on current line (with space)
-          wrapWords w rest acc (current <> " " <> word)
-      | otherwise =
-          -- Word doesn't fit, start new line
-          if T.length word > w
-            then let (pre, post) = T.splitAt w word
-                 in wrapWords w (post:rest) (acc ++ [current, pre]) ""
-            else wrapWords w rest (acc ++ [current]) word
-
--- | Helper to wrap text in a viewport-safe way using Widget monad
--- Uses the available context width to wrap text dynamically
--- NOTE: Must be Greedy horizontally to properly fill available space before wrapping
-wrapText :: Text -> Widget n
-wrapText t = Widget Greedy Fixed $ do
-    ctx <- getContext
-    -- Account for borders and padding (subtract 2 for safety margin)
-    let availWidth = max 20 (availWidth' ctx - 2)
-        wrapped = wrapTextToWidth availWidth t
-    render $ vBox $ map txt wrapped
-  where
-    availWidth' ctx = ctx ^. availWidthL
+-- | Safe unsnoc - decompose list into init and last
+unsnoc :: [a] -> Maybe ([a], a)
+unsnoc [] = Nothing
+unsnoc xs = Just (init xs, last xs)
 
 -- ════════════════════════════════════════════════════════════════
 -- MAIN CHAT WIDGET
@@ -103,10 +60,10 @@ renderChatHistory st =
       -- Check if the last message should be rendered as structured
       -- (when we have pendingStructured and last message is from Assistant)
       (messagesToRender, lastStructured) =
-        case (safeLast messages, pendingStructured) of
-          (Just lastMsg, Just struct)
+        case (unsnoc messages, pendingStructured) of
+          (Just (initMsgs, lastMsg), Just struct)
             | messageRole lastMsg == Assistant ->
-              (safeInit messages, Just struct)
+              (initMsgs, Just struct)
           _ -> (messages, Nothing)
 
       messageWidgets = map renderMessage messagesToRender
@@ -124,21 +81,6 @@ renderChatHistory st =
   in if null messages && null thinkingWidget && isNothing lastStructured
      then renderEmptyChat
      else vBox (messageWidgets ++ [lastWidget] ++ thinkingWidget)
-  where
-    isNothing Nothing = True
-    isNothing _       = False
-
-    -- Safe last element
-    safeLast :: [a] -> Maybe a
-    safeLast []     = Nothing
-    safeLast [x]    = Just x
-    safeLast (_:xs) = safeLast xs
-
-    -- Safe init (all but last)
-    safeInit :: [a] -> [a]
-    safeInit []     = []
-    safeInit [_]    = []
-    safeInit (x:xs) = x : safeInit xs
 
 -- ════════════════════════════════════════════════════════════════
 -- MESSAGE RENDERING
@@ -159,7 +101,7 @@ renderMessage Message{..} =
            ]
        , padLeft (Pad 2) $
          withAttr msgAttr $
-         wrapText messageContent
+         wrapTextDynamic messageContent
        ]
 
 -- | Render "Thinking..." indicator while waiting for response
