@@ -27,6 +27,8 @@ import Tapir.UI.Input (mkInputEditor)
 import Tapir.Core.Selection (SelectionEmpty(..))
 import Tapir.Db.Repository (createSession, getRecentSessions)
 import Tapir.UI.Event.Session (sessionToSummary)
+import Tapir.Service.Session (mkNewSessionWithMode)
+import Tapir.Core.Constants (recentSessionsLimit)
 
 -- | Execute a command from the command menu
 executeCommand :: Command -> EventM Name AppState ()
@@ -35,18 +37,10 @@ executeCommand = \case
     st <- get
     let langMod = _asLangModule st
         conn = _asDbConnection st
+        mode = _asCurrentMode st
     newSid <- liftIO $ UUID.toText <$> nextRandom
     now <- liftIO getCurrentTime
-    let newSession = Session
-          { sessionId          = newSid
-          , sessionLanguageId  = languageId (languageInfo langMod)
-          , sessionMode        = _asCurrentMode st
-          , sessionLearnerLevel = learnerLevel langMod
-          , sessionCreatedAt   = now
-          , sessionUpdatedAt   = now
-          , sessionTitle       = Nothing
-          , sessionActive      = True
-          }
+    let newSession = mkNewSessionWithMode mode newSid langMod now
     _ <- liftIO $ createSession conn newSession
     asSession .= newSession
     asMessages .= []
@@ -57,7 +51,7 @@ executeCommand = \case
     let conn = _asDbConnection st
         chan = _asEventChannel st
     liftIO $ void $ forkIO $ do
-      result <- getRecentSessions conn 50
+      result <- getRecentSessions conn recentSessionsLimit
       case result of
         Right sessionsWithCount -> do
           let summaries = map sessionToSummary sessionsWithCount

@@ -54,7 +54,8 @@ TAPIR/
 │   ├── Service/               # Business logic layer
 │   │   ├── LLM.hs            # LLM request orchestration
 │   │   ├── Card.hs           # Card generation & Anki export
-│   │   └── Message.hs        # Message persistence
+│   │   ├── Message.hs        # Message persistence
+│   │   └── Session.hs        # Session lifecycle management
 │   ├── Client/
 │   │   ├── LLM.hs            # Abstract LLM interface
 │   │   ├── LLM/

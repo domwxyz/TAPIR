@@ -27,6 +27,7 @@ import Data.Text.Zipper (textZipper)
 import Tapir.Types (Mode(..))
 import Tapir.UI.Types
 import Tapir.UI.Attrs
+import Tapir.Core.Constants (inputAreaMaxHeight)
 
 -- ════════════════════════════════════════════════════════════════
 -- INPUT WIDGET
@@ -42,8 +43,8 @@ renderInput st =
       content = if isEditorEmpty (_asInputEditor st)
         then renderPlaceholder st
         else editorWidget
-      -- Compact input area: prompt > content (2-3 lines max)
-  in vLimit 3 $ hBox
+      -- Compact input area
+  in vLimit inputAreaMaxHeight $ hBox
        [ prompt
        , padLeft (Pad 1) content
        ]

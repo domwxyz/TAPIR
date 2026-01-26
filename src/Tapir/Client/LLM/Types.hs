@@ -47,6 +47,7 @@ import Data.Text (Text)
 import GHC.Generics (Generic)
 
 import Tapir.Client.LLM.Tools (Tool, ToolChoice)
+import Tapir.Core.Constants (defaultLLMTemperature, defaultLLMMaxTokens)
 
 -- ════════════════════════════════════════════════════════════════
 -- REQUEST TYPES
@@ -101,8 +102,8 @@ defaultChatRequest model msgs = ChatRequest
   { crModel       = model
   , crMessages    = msgs
   , crStream      = True
-  , crTemperature = Just 0.7
-  , crMaxTokens   = Just 2000
+  , crTemperature = Just defaultLLMTemperature
+  , crMaxTokens   = Just defaultLLMMaxTokens
   , crTopP        = Nothing
   , crStop        = Nothing
   , crTools       = Nothing

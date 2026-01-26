@@ -30,6 +30,24 @@ module Tapir.Core.Constants
   , openAIApiEndpoint
   , ollamaDefaultEndpoint
 
+    -- * LLM Request Limits
+  , maxHistoryMessages
+  , defaultLLMTemperature
+  , defaultLLMMaxTokens
+
+    -- * UI Dimensions
+  , sessionListViewportHeight
+  , inputAreaMaxHeight
+  , minTextWrapWidth
+  , textWrapHorizontalPadding
+  , maxVocabHighlightsInChat
+
+    -- * Database Query Limits
+  , recentSessionsLimit
+
+    -- * Async / Concurrency
+  , eventChannelBufferSize
+
     -- * Application
   , appName
   , appVersion
@@ -90,6 +108,65 @@ openAIApiEndpoint = "https://api.openai.com/v1/chat/completions"
 
 ollamaDefaultEndpoint :: String
 ollamaDefaultEndpoint = "http://localhost:11434/v1/chat/completions"
+
+-- ════════════════════════════════════════════════════════════════
+-- LLM REQUEST LIMITS
+-- ════════════════════════════════════════════════════════════════
+
+-- | Maximum number of conversation history messages to include in LLM requests.
+-- Keeps context window manageable while providing enough context.
+maxHistoryMessages :: Int
+maxHistoryMessages = 20
+
+-- | Default temperature for LLM requests when not specified in config.
+-- Range: 0.0 (deterministic) to 2.0 (creative). 0.7 balances coherence and variety.
+defaultLLMTemperature :: Double
+defaultLLMTemperature = 0.7
+
+-- | Default max tokens for LLM responses when not specified in config.
+defaultLLMMaxTokens :: Int
+defaultLLMMaxTokens = 2000
+
+-- ════════════════════════════════════════════════════════════════
+-- UI DIMENSIONS
+-- ════════════════════════════════════════════════════════════════
+
+-- | Height of the session list viewport in the sessions modal.
+sessionListViewportHeight :: Int
+sessionListViewportHeight = 14
+
+-- | Maximum height of the input text area (in lines).
+inputAreaMaxHeight :: Int
+inputAreaMaxHeight = 3
+
+-- | Minimum width for text wrapping (prevents overly narrow columns).
+minTextWrapWidth :: Int
+minTextWrapWidth = 20
+
+-- | Horizontal padding subtracted from available width for text wrapping.
+textWrapHorizontalPadding :: Int
+textWrapHorizontalPadding = 2
+
+-- | Maximum vocabulary highlights to show in conversation mode responses.
+maxVocabHighlightsInChat :: Int
+maxVocabHighlightsInChat = 3
+
+-- ════════════════════════════════════════════════════════════════
+-- DATABASE QUERY LIMITS
+-- ════════════════════════════════════════════════════════════════
+
+-- | Number of recent sessions to load for the session list modal.
+recentSessionsLimit :: Int
+recentSessionsLimit = 50
+
+-- ════════════════════════════════════════════════════════════════
+-- ASYNC / CONCURRENCY
+-- ════════════════════════════════════════════════════════════════
+
+-- | Size of the BChan buffer for async events.
+-- Larger values prevent blocking on rapid events but use more memory.
+eventChannelBufferSize :: Int
+eventChannelBufferSize = 10
 
 -- ════════════════════════════════════════════════════════════════
 -- APPLICATION

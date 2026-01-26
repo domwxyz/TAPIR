@@ -33,6 +33,8 @@ import Tapir.UI.Input (mkInputEditor)
 import Tapir.Core.Selection (Selection, SelectionEmpty(..))
 import qualified Tapir.Core.Selection as Sel
 import Tapir.Db.Repository (createSession, getRecentSessions, getSessionMessages, deleteSession)
+import Tapir.Service.Session (mkNewSessionWithMode, sessionFromSummary)
+import Tapir.Core.Constants (recentSessionsLimit)
 
 -- | Handle Ctrl+N - create new session from main view
 handleNewSession :: EventM Name AppState ()
@@ -40,20 +42,11 @@ handleNewSession = do
   st <- get
   let langMod = _asLangModule st
       conn = _asDbConnection st
+      mode = _asCurrentMode st
   newSid <- liftIO $ UUID.toText <$> nextRandom
   now <- liftIO getCurrentTime
-  let newSession = Session
-        { sessionId          = newSid
-        , sessionLanguageId  = languageId (languageInfo langMod)
-        , sessionMode        = _asCurrentMode st
-        , sessionLearnerLevel = learnerLevel langMod
-        , sessionCreatedAt   = now
-        , sessionUpdatedAt   = now
-        , sessionTitle       = Nothing
-        , sessionActive      = True
-        }
+  let newSession = mkNewSessionWithMode mode newSid langMod now
 
-  -- Persist new session to database
   _ <- liftIO $ createSession conn newSession
 
   asSession .= newSession
@@ -68,7 +61,7 @@ handleLoadSessions = do
       chan = _asEventChannel st
   -- Trigger async load of sessions
   liftIO $ void $ forkIO $ do
-    result <- getRecentSessions conn 50
+    result <- getRecentSessions conn recentSessionsLimit
     case result of
       Right sessionsWithCount -> do
         let summaries = map sessionToSummary sessionsWithCount
@@ -97,16 +90,8 @@ handleSessionSelectFromSelection sel = do
 
   -- Update session info in state immediately
   now <- liftIO getCurrentTime
-  let newSession = Session
-        { sessionId = sid
-        , sessionLanguageId = summaryLanguageId selectedSummary
-        , sessionMode = summaryMode selectedSummary
-        , sessionLearnerLevel = learnerLevel (_asLangModule st)
-        , sessionCreatedAt = now
-        , sessionUpdatedAt = summaryLastActivity selectedSummary
-        , sessionTitle = Just (summaryTitle selectedSummary)
-        , sessionActive = True
-        }
+  let level = learnerLevel (_asLangModule st)
+      newSession = sessionFromSummary selectedSummary level now
   asSession .= newSession
   asCurrentMode .= summaryMode selectedSummary
   asMessages .= []
@@ -124,7 +109,7 @@ handleSessionDeleteFromSelection sel = do
   liftIO $ void $ forkIO $ do
     _ <- deleteSession conn sid
     -- Reload sessions list
-    result <- getRecentSessions conn 50
+    result <- getRecentSessions conn recentSessionsLimit
     case result of
       Right sessionsWithCount ->
         writeBChan chan (EvSessionsLoaded (map sessionToSummary sessionsWithCount))
@@ -152,20 +137,11 @@ handleSessionNew = do
   st <- get
   let langMod = _asLangModule st
       conn = _asDbConnection st
+      mode = _asCurrentMode st
   newSid <- liftIO $ UUID.toText <$> nextRandom
   now <- liftIO getCurrentTime
-  let newSession = Session
-        { sessionId          = newSid
-        , sessionLanguageId  = languageId (languageInfo langMod)
-        , sessionMode        = _asCurrentMode st
-        , sessionLearnerLevel = learnerLevel langMod
-        , sessionCreatedAt   = now
-        , sessionUpdatedAt   = now
-        , sessionTitle       = Nothing
-        , sessionActive      = True
-        }
+  let newSession = mkNewSessionWithMode mode newSid langMod now
 
-  -- Persist new session to database
   liftIO $ void $ createSession conn newSession
 
   asSession .= newSession

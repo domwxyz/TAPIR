@@ -21,7 +21,7 @@ cabal run tapir       # Run application
 |---------|----------|
 | Entry point | `app/Main.hs` |
 | Core utilities | `src/Tapir/Core/Constants.hs`, `Tapir/Core/Error.hs`, `Tapir/Core/Logging.hs` |
-| Service layer | `src/Tapir/Service/LLM.hs`, `Tapir/Service/Card.hs`, `Tapir/Service/Message.hs` |
+| Service layer | `src/Tapir/Service/LLM.hs`, `Tapir/Service/Card.hs`, `Tapir/Service/Message.hs`, `Tapir/Service/Session.hs` |
 | Main app logic | `src/Tapir/UI/App.hs` |
 | UI drawing | `src/Tapir/UI/Draw.hs` |
 | Event handling | `src/Tapir/UI/Event.hs`, `Tapir/UI/Event/` |
@@ -427,7 +427,8 @@ TAPIR/
 │   ├── Service/               # Business logic layer
 │   │   ├── LLM.hs            # LLM request orchestration
 │   │   ├── Card.hs           # Card generation & Anki export
-│   │   └── Message.hs        # Message creation & processing
+│   │   ├── Message.hs        # Message creation & processing
+│   │   └── Session.hs        # Session lifecycle management
 │   ├── Client/
 │   │   ├── LLM.hs            # Abstract LLM client interface
 │   │   ├── LLM/
@@ -865,6 +866,9 @@ data TapirEvent
 | Send message async | `sendMessageAsync` | `Tapir.Service.LLM` |
 | Create user message | `mkUserMessage` | `Tapir.Service.Message` |
 | Create assistant message | `mkAssistantMessage` | `Tapir.Service.Message` |
+| Create new session (default mode) | `mkNewSession` | `Tapir.Service.Session` |
+| Create new session (specific mode) | `mkNewSessionWithMode` | `Tapir.Service.Session` |
+| Session from summary | `sessionFromSummary` | `Tapir.Service.Session` |
 | Extract card from response | `extractCardFromResponse` | `Tapir.Service.Card` |
 | Card response to AnkiCard | `cardResponseToAnkiCard` | `Tapir.Service.Card` |
 | **Structured Responses** | | |

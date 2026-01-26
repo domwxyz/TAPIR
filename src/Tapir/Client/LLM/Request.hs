@@ -26,6 +26,7 @@ import Tapir.Types.Provider (ProviderConfig, providerModel)
 import Tapir.Config.Loader (getSystemPrompt)
 import Tapir.Client.LLM.Types
 import Tapir.Client.LLM.Tools
+import Tapir.Core.Constants (maxHistoryMessages)
 
 -- | Configuration for request building
 data RequestConfig = RequestConfig
@@ -60,7 +61,7 @@ buildRequestWithTools config langMod mode history currentMsg =
       systemMsg = maybe [] (\p -> [ChatMessage "system" p]) systemPrompt
       
       -- Convert history to chat messages (limit to recent)
-      historyMsgs = map toChatMessage (takeEnd 20 history)
+      historyMsgs = map toChatMessage (takeEnd maxHistoryMessages history)
       
       -- Current message
       currentChatMsg = toChatMessage currentMsg

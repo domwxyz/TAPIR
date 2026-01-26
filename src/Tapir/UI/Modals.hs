@@ -39,6 +39,7 @@ import Tapir.UI.Attrs
 import Tapir.UI.Widgets (keyHintRow)
 import Tapir.Core.Selection (Selection, SelectionEmpty(..))
 import qualified Tapir.Core.Selection as Sel
+import Tapir.Core.Constants (sessionListViewportHeight)
 
 -- ════════════════════════════════════════════════════════════════
 -- MODAL DISPATCHER
@@ -260,7 +261,7 @@ renderSessionsModal eSel =
      padAll 1 $
      hLimit 70 $
      vBox
-       [ vLimit 14 $  -- Fixed height for session list, allows scrolling
+       [ vLimit sessionListViewportHeight $
          viewport NameSessionList Vertical content
        , txt " "
        , hBorder

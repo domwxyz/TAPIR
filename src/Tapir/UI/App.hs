@@ -38,6 +38,8 @@ import Tapir.Config.Types (AppConfig(..), UIConfig(..))
 import Tapir.Client.LLM (LLMClient)
 import Tapir.Client.Anki (mkAnkiClientWithConfig, checkConnection)
 import Tapir.Db.Repository (createSession)
+import Tapir.Service.Session (mkNewSession)
+import Tapir.Core.Constants (eventChannelBufferSize)
 import Tapir.UI.Types
 import Tapir.UI.Attrs (getAttrMap)
 import Tapir.UI.Draw (drawUI)
@@ -61,7 +63,7 @@ tapirApp = App
 -- | Run the TAPIR application
 runTapir :: AppConfig -> LanguageModule -> LLMClient -> Connection -> IO ()
 runTapir config langMod client conn = do
-  chan <- newBChan 10
+  chan <- newBChan eventChannelBufferSize
   initialState <- mkInitialState config langMod client conn chan
 
   let buildVty = mkVty defaultConfig
@@ -99,16 +101,7 @@ mkInitialState config langMod client conn chan = do
   sid <- UUID.toText <$> nextRandom
   now <- getCurrentTime
 
-  let session = Session
-        { sessionId          = sid
-        , sessionLanguageId  = languageId (languageInfo langMod)
-        , sessionMode        = Conversation
-        , sessionLearnerLevel = learnerLevel langMod
-        , sessionCreatedAt   = now
-        , sessionUpdatedAt   = now
-        , sessionTitle       = Nothing
-        , sessionActive      = True
-        }
+  let session = mkNewSession sid langMod now
 
   _ <- createSession conn session
 

@@ -56,6 +56,7 @@ import Text.Wrap (wrapText, defaultWrapSettings, WrapSettings(..))
 
 import Tapir.UI.Attrs
 import Tapir.UI.Types (Name)
+import Tapir.Core.Constants (minTextWrapWidth, textWrapHorizontalPadding)
 
 -- ════════════════════════════════════════════════════════════════
 -- BOX DRAWING
@@ -233,7 +234,7 @@ wrapTextToWidth width content
 wrapTextDynamic :: Text -> Widget Name
 wrapTextDynamic t = Widget Greedy Fixed $ do
     ctx <- getContext
-    let availWidth = max 20 (ctx ^. availWidthL - 2)
+    let availWidth = max minTextWrapWidth (ctx ^. availWidthL - textWrapHorizontalPadding)
         wrapped = wrapTextToWidth availWidth t
     render $ vBox $ map txt wrapped
 

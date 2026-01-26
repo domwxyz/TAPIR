@@ -27,6 +27,7 @@ import Tapir.Types.Response
 import Tapir.UI.Types (Name)
 import Tapir.UI.Attrs
 import Tapir.UI.Widgets (wrapTextDynamic)
+import Tapir.Core.Constants (maxVocabHighlightsInChat)
 
 -- ════════════════════════════════════════════════════════════════
 -- MAIN DISPATCHER
@@ -107,7 +108,7 @@ renderInlineCorrections corrs =
 renderCompactVocab :: [VocabHighlight] -> [Widget Name]
 renderCompactVocab [] = []
 renderCompactVocab vocab =
-  let limited = take 3 vocab  -- Max 3 vocab items for conversation mode
+  let limited = take maxVocabHighlightsInChat vocab
   in [ txt " "  -- Single blank line
      , padLeft (Pad 2) $ withAttr attrTimestamp $ txt "Vocab:"
      ] ++ map renderVocabLine limited

@@ -71,6 +71,7 @@ library
     Tapir.Service.Card
     Tapir.Service.LLM
     Tapir.Service.Message
+    Tapir.Service.Session
     Tapir.UI.Types
     Tapir.UI.Attrs
     Tapir.UI.Widgets
