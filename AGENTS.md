@@ -3,7 +3,7 @@
 **Project:** TAPIR (Translation API Router)
 **Type:** Haskell + brick TUI for language learning
 **Status:** Complete (Phase 6/6)
-**Last Updated:** January 22, 2026
+**Last Updated:** January 25, 2026
 
 ---
 
@@ -20,16 +20,26 @@ cabal run tapir       # Run application
 | Concern | Location |
 |---------|----------|
 | Entry point | `app/Main.hs` |
+| Core utilities | `src/Tapir/Core/Constants.hs`, `Tapir/Core/Error.hs`, `Tapir/Core/Logging.hs` |
+| Service layer | `src/Tapir/Service/LLM.hs`, `Tapir/Service/Card.hs`, `Tapir/Service/Message.hs` |
 | Main app logic | `src/Tapir/UI/App.hs` |
+| UI drawing | `src/Tapir/UI/Draw.hs` |
+| Event handling | `src/Tapir/UI/Event.hs`, `Tapir/UI/Event/` |
 | State types | `src/Tapir/UI/Types.hs` |
 | Config loading | `src/Tapir/Config/Loader.hs` |
-| Database ops | `src/Tapir/Db/Repository.hs` |
-| LLM client | `src/Tapir/Client/LLM/OpenRouter.hs` |
+| Database ops | `src/Tapir/Db/Repository.hs`, `Tapir/Db/Instances.hs` |
+| LLM client interface | `src/Tapir/Client/LLM.hs` |
+| LLM base implementation | `src/Tapir/Client/LLM/Base.hs` |
+| LLM SSE parser | `src/Tapir/Client/LLM/SSE.hs` |
+| OpenRouter client | `src/Tapir/Client/LLM/OpenRouter.hs` |
+| OpenAI client | `src/Tapir/Client/LLM/OpenAI.hs` |
+| Ollama client | `src/Tapir/Client/LLM/Ollama.hs` |
 | Anki client | `src/Tapir/Client/Anki.hs` |
 | **Structured responses** | `src/Tapir/Types/Response.hs` |
 | **Tool definitions** | `src/Tapir/Client/LLM/Tools.hs` |
 | **Response parsing** | `src/Tapir/Client/LLM/Response.hs` |
 | **Response rendering** | `src/Tapir/UI/Structured.hs` |
+| **Command execution** | `src/Tapir/UI/Command.hs` |
 
 ---
 
@@ -43,7 +53,7 @@ TAPIR is a **language-agnostic terminal-based language learning assistant** buil
 - **Translation** - Bidirectional translation with nuance preservation
 - **Anki integration** - Direct flashcard generation and push to Anki
 - **Language-agnostic** - All language-specific logic in YAML configs
-- **Provider-agnostic** - Support for OpenRouter, Anthropic, OpenAI, Ollama
+- **Provider-agnostic** - Support for OpenRouter, OpenAI, Ollama (Anthropic planned)
 
 ### Design Philosophy
 1. **Configuration over code** - Language settings, prompts, providers in YAML
@@ -52,6 +62,7 @@ TAPIR is a **language-agnostic terminal-based language learning assistant** buil
 4. **Keyboard-first UX** - Every action has a keybinding
 5. **Offline-capable** - Local history persists without network
 6. **Structured output** - Tool/function calling guarantees parseable responses
+7. **Service layer** - Business logic separated from UI and IO
 
 ---
 
@@ -212,9 +223,9 @@ parseToolCallResponse mode tc =
 
 ### Event Flow
 
-1. **User sends message** → `handleEvent (KChar '\RET')`
+1. **User sends message** → `handleEvent (VtyEvent (KChar '\RET'))`
 2. **Build request** with tools → `buildRequestWithTools`
-3. **Send to LLM** (non-streaming) → `llmRequestComplete`
+3. **Send to LLM** (non-streaming) → `sendMessageAsync` → `llmComplete`
 4. **Receive response** with `tool_calls` array
 5. **Parse tool call** → `parseToolCallResponse`
 6. **Send event** → `EvStructuredResponse structured`
@@ -274,15 +285,109 @@ This keeps the database simple while preserving all functionality. The structure
 
 ---
 
+## Architecture
+
+### Layered Architecture
+
+TAPIR follows a clean layered architecture:
+
+1. **Types Layer** (`Tapir.Types/`) - Pure domain types with no dependencies
+2. **Core Layer** (`Tapir.Core/`) - Shared utilities (constants, error handling, logging stub)
+3. **Config Layer** (`Tapir.Config/`) - YAML parsing, validation, and prompt templating
+4. **Client Layer** (`Tapir.Client/`) - External service integrations with proper abstractions
+   - `LLM/` - LLM client implementations (OpenRouter, OpenAI, Ollama)
+   - `LLM/Base.hs` - Shared OpenAI-compatible implementation
+   - `LLM/SSE.hs` - Server-Sent Events stream parser
+   - `LLM/Tools.hs` - Tool/function definitions
+   - `LLM/Request.hs` - Request building
+   - `LLM/Response.hs` - Response parsing
+   - `Anki.hs` - AnkiConnect integration
+5. **Database Layer** (`Tapir.Db/`) - Persistence with repository pattern
+   - `Repository.hs` - CRUD operations
+   - `Instances.hs` - SQLite type class instances (orphan instances isolated)
+   - `Schema.hs` - DDL & migrations
+6. **Service Layer** (`Tapir.Service/`) - Business logic, pure where possible
+   - `LLM.hs` - LLM request orchestration (wraps client layer)
+   - `Card.hs` - Card generation & Anki export logic
+   - `Message.hs` - Message creation & processing
+7. **UI Layer** (`Tapir.UI/`) - Brick TUI with event-driven updates
+   - `Draw.hs` - Main UI rendering
+   - `Event.hs` - Event dispatcher
+   - `Event/Main.hs` - Keyboard input handling
+   - `Event/Custom.hs` - Async event processing
+   - `Event/Message.hs` - Message events
+   - `Event/Session.hs` - Session management events
+   - `Event/Card.hs` - Card events
+   - `Event/Modal.hs` - Modal dialog events
+   - `Event/Settings.hs` - Settings modal events
+   - `Command.hs` - Command parsing & execution
+   - `Structured.hs` - Structured response rendering
+   - `Chat.hs` - Chat history display
+   - `Input.hs` - Text editor widget
+   - `StatusBar.hs` - Bottom status bar
+   - `Modals.hs` - Modal dialogs
+   - `Widgets.hs` - Reusable widgets
+   - `Attrs.hs` - Color theme attributes
+
+### Event Flow
+
+1. User input captured by brick
+2. Events dispatched to `handleEvent` in `Tapir.UI.Event`
+3. Event handler routes to appropriate sub-handler:
+   - `handleMainEvent` for keyboard input when no modal
+   - `handleModalEvent` for keyboard input when modal open
+   - `handleCustomEvent` for async responses via BChan
+4. LLM requests spawn async thread via `forkIO` in `sendMessageAsync` (Service layer)
+5. Structured responses sent via `BChan TapirEvent`
+6. `handleCustomEvent` updates UI state in `EventM`
+7. brick re-renders UI via `drawUI` in `Draw.hs`
+
+**Critical Pattern**: Never update UI directly from async threads. Always use `BChan` to send events to brick's event loop.
+
+### LLM Provider Abstraction
+
+All providers implement a common interface through a generic base client:
+
+```haskell
+-- Abstract interface (Tapir.Client.LLM)
+data LLMClient = LLMClient
+  { llmProviderName    :: !Text
+  , llmComplete        :: ChatRequest -> IO (Either TapirError ChatResponse)
+  , llmStreamComplete  :: ChatRequest -> StreamCallback -> Maybe (TVar Bool) -> IO (Either TapirError StreamResult)
+  , llmIsConfigured    :: IO Bool
+  }
+
+-- Shared implementation (Tapir.Client.LLM.Base)
+data GenericLLMClient = GenericLLMClient
+  { glcManager   :: !Manager
+  , glcConfig    :: !ProviderConfig
+  , glcEndpoint  :: !ProviderEndpoint
+  , glcGetApiKey :: !(IO (Maybe Text))
+  }
+
+-- Provider-specific clients use GenericLLMClient
+-- OpenRouter.hs, OpenAI.hs, Ollama.hs all use sendGenericRequest/streamGenericRequest
+```
+
+This design makes adding new providers easy: just define the `ProviderEndpoint` (URL, auth headers, extra headers) and call `mkGenericClient`.
+
+---
+
 ## Implementation Status
 
 ### Completed Features
 - Configuration system with YAML loading from `~/.config/tapir/`
 - Language modules (Spanish reference implementation)
-- SQLite database with full schema and repository pattern
-- LLM client with OpenRouter integration and streaming support
+- SQLite database with full schema, repository pattern, and type-safe queries
+- Multi-provider LLM client support (OpenRouter, OpenAI, Ollama)
+- LLM client abstraction with generic base implementation
+- SSE stream parser for all OpenAI-compatible providers
+- Structured responses with mode-specific tool/function calling
+- Response rendering with sectioned, color-coded display
 - Complete brick TUI with all four modes (Chat, Correct, Translate, Card)
-- Streaming token display via BChan
+- Separated event handlers (Main, Custom, Message, Session, Card, Modal, Settings)
+- Service layer for business logic (LLM, Card, Message)
+- Command menu (Ctrl+P) for quick access to all commands
 - Session management (create, list, load, delete with message history)
 - Modal dialogs (Help, Settings, Sessions, Card Preview, Quit confirm)
 - Database persistence for messages, sessions, cards
@@ -290,10 +395,11 @@ This keeps the database simple while preserving all functionality. The structure
 - Settings modal with level cycling and prompt preview
 - Card generation with robust JSON parsing and markdown fence handling
 - Text wrapping with dynamic width calculation
-- System prompt injection per mode
+- System prompt injection per mode with variable interpolation
+- Core utilities (constants, error handling, logging stub)
 
 ### Known Limitations
-- **Windows terminals**: Must use Windows Terminal/PowerShell (not Git Bash/mintty)
+- **Provider support**: Anthropic is planned but not yet implemented
 
 ---
 
@@ -310,44 +416,79 @@ TAPIR/
 │   │   ├── Language.hs         # LanguageInfo, LanguageModule, LearnerLevel
 │   │   ├── Provider.hs         # ProviderType, ProviderConfig
 │   │   └── Response.hs        # Structured response types for all modes
+│   ├── Core/                  # Core utilities
+│   │   ├── Constants.hs       # API endpoints, provider names, env vars
+│   │   ├── Error.hs          # Safe list operations, error handling
+│   │   └── Logging.hs        # Logging placeholder (stub)
 │   ├── Config/
 │   │   ├── Types.hs            # AppConfig, UIConfig, DatabaseConfig
 │   │   ├── Loader.hs           # YAML loading, prompt interpolation
 │   │   └── Defaults.hs         # Default configurations
-│   ├── UI/
-│   │   ├── Types.hs            # AppState, Modal, RequestState, TapirEvent
-│   │   ├── App.hs              # Main brick app, handleEvent, handleCustomEvent
-│   │   ├── Attrs.hs            # Color theme attributes
-│   │   ├── Widgets.hs          # Reusable widget helpers
-│   │   ├── Chat.hs             # Chat history viewport rendering
-│   │   ├── Input.hs            # Text editor widget
-│   │   ├── StatusBar.hs        # Mode tabs, status info
-│   │   ├── Modals.hs           # All modal dialogs
-│   │   └── Structured.hs       # Structured response rendering
+│   ├── Service/               # Business logic layer
+│   │   ├── LLM.hs            # LLM request orchestration
+│   │   ├── Card.hs           # Card generation & Anki export
+│   │   └── Message.hs        # Message creation & processing
 │   ├── Client/
-│   │   ├── LLM.hs              # Abstract LLM client interface
+│   │   ├── LLM.hs            # Abstract LLM client interface
 │   │   ├── LLM/
-│   │   │   ├── Types.hs        # ChatMessage, ChatRequest, StreamChunk, ToolCall
-│   │   │   ├── Tools.hs        # Tool definitions for structured output
-│   │   │   ├── Request.hs      # Request building with tools
-│   │   │   ├── Response.hs     # Response parsing from tool calls
-│   │   │   └── OpenRouter.hs   # OpenRouter implementation with SSE
-│   │   └── Anki.hs             # AnkiConnect client
+│   │   │   ├── Base.hs       # Generic OpenAI-compatible client
+│   │   │   ├── Types.hs      # ChatMessage, ChatRequest, StreamChunk, ToolCall
+│   │   │   ├── Tools.hs      # Tool definitions for structured output
+│   │   │   ├── Request.hs    # Request building with tools
+│   │   │   ├── Response.hs   # Response parsing from tool calls
+│   │   │   ├── SSE.hs       # Server-Sent Events parser
+│   │   │   ├── OpenRouter.hs # OpenRouter implementation
+│   │   │   ├── OpenAI.hs    # OpenAI implementation
+│   │   │   └── Ollama.hs    # Ollama implementation (local)
+│   │   └── Anki.hs           # AnkiConnect client
 │   ├── Db/
 │   │   ├── Schema.hs           # Database initialization, migrations
-│   │   └── Repository.hs       # All CRUD operations
-│   └── Util/                   # Utility functions
+│   │   ├── Repository.hs       # All CRUD operations
+│   │   └── Instances.hs       # SQLite type instances (orphan instances)
+│   └── UI/
+│       ├── Types.hs            # AppState, Modal, RequestState, TapirEvent
+│       ├── App.hs             # Main brick app definition
+│       ├── Draw.hs            # Main UI rendering
+│       ├── Event.hs           # Main event dispatcher
+│       ├── Event/
+│       │   ├── Main.hs        # Keyboard input handling
+│       │   ├── Custom.hs      # Async event processing
+│       │   ├── Message.hs     # Message events
+│       │   ├── Session.hs     # Session events
+│       │   ├── Card.hs        # Card events
+│       │   ├── Modal.hs       # Modal dialog events
+│       │   └── Settings.hs    # Settings modal events
+│       ├── Command.hs          # Command parsing/execution
+│       ├── Attrs.hs           # Color theme attributes
+│       ├── Widgets.hs         # Reusable widget helpers
+│       ├── Chat.hs            # Chat history viewport rendering
+│       ├── Input.hs           # Text editor widget
+│       ├── StatusBar.hs       # Mode tabs, status info
+│       ├── Modals.hs          # Help, Settings, Sessions dialogs
+│       └── Structured.hs      # Structured response rendering
 ├── test/                       # Test suite
 │   ├── Spec.hs                 # Main test entry
 │   └── Tapir/
 │       ├── Config/LoaderSpec.hs
-│       ├── Client/LLMSpec.hs
+│       ├── Types/ProviderSpec.hs
+│       ├── Types/ResponseSpec.hs
+│       ├── Service/CardSpec.hs
+│       ├── Client/LLM/
+│       │   ├── TypesSpec.hs
+│       │   ├── ToolsSpec.hs
+│       │   ├── RequestSpec.hs
+│       │   ├── ResponseSpec.hs
+│       │   ├── OpenAISpec.hs
+│       │   └── OllamaSpec.hs
 │       └── Db/RepositorySpec.hs
+├── config/                     # Default configuration
+│   └── config.yaml
 ├── languages/                  # Template language modules
 │   └── spanish.yaml            # Reference implementation
 ├── CLAUDE.md                   # Development guide
 ├── AGENTS.md                   # AI agent guide (this file)
-└── README.md                   # User-facing documentation
+├── README.md                   # User-facing documentation
+└── install.sh                  # Installation script
 ```
 
 ---
@@ -370,9 +511,10 @@ TAPIR/
 active_language: spanish
 
 provider:
-  type: openrouter           # openrouter | anthropic | openai | ollama
+  type: openrouter           # openrouter | openai | ollama | anthropic (planned)
   api_key: "your-api-key"    # Or use ${OPENROUTER_API_KEY}
   model: "z-ai/glm-4.7"
+  # base_url: "http://localhost:11434"  # Optional: custom endpoint for Ollama
   temperature: 0.7
   max_tokens: 2000
   stream: true
@@ -503,28 +645,50 @@ FOREIGN KEY (source_msg_id) REFERENCES messages(id) ON DELETE SET NULL
 
 ## Architecture Patterns
 
-### Event Flow
+### Service Layer Pattern
 
-1. User input captured by brick
-2. Events dispatched to `handleEvent` in `Tapir.UI.App`
-3. LLM requests spawn async thread via `forkIO`
-4. Streaming tokens sent via `BChan TapirEvent`
-5. `handleCustomEvent` updates UI state in `EventM`
-6. brick re-renders UI
-
-**Critical Pattern**: Never update UI directly from async threads. Always use `BChan` to send events to brick's event loop.
-
-### Streaming Architecture
+Business logic is separated from UI and database:
 
 ```haskell
--- In async thread:
-streamRequest client req $ \token -> do
-  writeBChan eventChan (EvStreamChunk token)
+-- In Service.LLM - Orchestrates LLM interactions
+sendMessage :: SendMessageConfig -> IO LLMResult
+sendMessage SendMessageConfig{..} = do
+  let messages = smcHistory ++ [smcUserMsg]
+      req = buildRequestWithTools smcConfig smcLangModule smcMode messages smcUserMsg
+  result <- llmComplete smcClient req
+  pure $ case result of
+    Left err -> LLMError err
+    Right resp -> ...
 
--- In EventM handler:
-handleCustomEvent (EvStreamChunk token) = do
-  asStreamingText %= (<> token)
-  vScrollToEnd viewport
+-- In Service.Message - Pure message creation
+mkUserMessage :: Text -> Text -> Mode -> UTCTime -> Message
+mkUserMessage sessionId content mode timestamp = Message { ... }
+
+-- In Service.Card - Card extraction logic
+extractCardFromResponse :: Text -> Text -> Maybe Int -> Text -> UTCTime -> Maybe AnkiCard
+extractCardFromResponse = ...  -- Tries multiple parsing strategies
+```
+
+### Generic LLM Implementation
+
+All providers share a common implementation pattern:
+
+```haskell
+-- 1. Define ProviderEndpoint (URL, auth, headers)
+openRouterEndpoint :: ProviderEndpoint
+openRouterEndpoint = ProviderEndpoint
+  { peBaseUrl      = openRouterApiEndpoint
+  , peAuthHeader   = Just $ \key req -> addHeader "Authorization" ("Bearer " <> key) req
+  , peExtraHeaders = addHeaders [ ("HTTP-Referer", "..."), ("X-Title", "...") ]
+  , peRequiresAuth = True
+  }
+
+-- 2. Create generic client using endpoint
+client = mkGenericClient manager cfg endpoint (getApiKey cfg)
+
+-- 3. Generic client handles request/response parsing
+sendGenericRequest :: GenericLLMClient -> ChatRequest -> IO (Either TapirError ChatResponse)
+streamGenericRequest :: GenericLLMClient -> ChatRequest -> StreamCallback -> ...
 ```
 
 ### State Management
@@ -560,6 +724,21 @@ result <- liftIO doAction
 case result of
   Right val -> ... -- use value
   Left err  -> asLastError .= Just err
+```
+
+### Safe List Operations
+
+Use safe operations from `Tapir.Core.Error` instead of partial functions:
+
+```haskell
+-- Instead of `head xs`
+safeHead xs :: Maybe a
+
+-- Instead of `xs !! 5`
+safeIndex xs 5 :: Maybe a
+
+-- Instead of `maximum xs`
+safeMaximum xs :: Maybe a
 ```
 
 ---
@@ -655,6 +834,7 @@ data TapirEvent
   = EvStreamChunk Text
   | EvStreamComplete Text
   | EvStreamError TapirError
+  | EvStructuredResponse StructuredResponse
   | EvAnkiStatusUpdate Bool
   | EvCardPushResult (Either TapirError Integer)
   | EvSessionsLoaded [SessionSummary]
@@ -670,25 +850,50 @@ data TapirEvent
 
 | Task | Function | Location |
 |------|----------|----------|
+| **Configuration** | | |
 | Load config | `loadConfig` | `Tapir.Config.Loader` |
 | Load language module | `loadLanguageModule` | `Tapir.Config.Loader` |
 | Get system prompt | `getSystemPrompt` | `Tapir.Config.Loader` |
 | Interpolate prompt | `interpolatePrompt` | `Tapir.Config.Loader` |
+| **LLM Client** | | |
 | Create LLM client | `mkLLMClient` | `Tapir.Client.LLM` |
+| Send non-streaming request | `llmComplete` | `Tapir.Client.LLM` |
 | Send streaming request | `llmStreamComplete` | `Tapir.Client.LLM` |
-| **Build request with tools** | `buildRequestWithTools` | `Tapir.Client.LLM.Request` |
-| **Get tool for mode** | `toolForMode` | `Tapir.Client.LLM.Tools` |
-| **Parse LLM response** | `parseResponse` | `Tapir.Client.LLM.Response` |
-| **Parse response for mode** | `parseResponseForMode` | `Tapir.Types.Response` |
-| **Render structured response** | `renderStructuredResponse` | `Tapir.UI.Structured` |
+| Check configured | `llmIsConfigured` | `Tapir.Client.LLM` |
+| **Service Layer** | | |
+| Send message (orchestrated) | `sendMessage` | `Tapir.Service.LLM` |
+| Send message async | `sendMessageAsync` | `Tapir.Service.LLM` |
+| Create user message | `mkUserMessage` | `Tapir.Service.Message` |
+| Create assistant message | `mkAssistantMessage` | `Tapir.Service.Message` |
+| Extract card from response | `extractCardFromResponse` | `Tapir.Service.Card` |
+| Card response to AnkiCard | `cardResponseToAnkiCard` | `Tapir.Service.Card` |
+| **Structured Responses** | | |
+| Build request with tools | `buildRequestWithTools` | `Tapir.Client.LLM.Request` |
+| Get tool for mode | `toolForMode` | `Tapir.Client.LLM.Tools` |
+| Parse LLM response | `parseResponse` | `Tapir.Client.LLM.Response` |
+| Parse response for mode | `parseResponseForMode` | `Tapir.Types.Response` |
+| Render structured response | `renderStructuredResponse` | `Tapir.UI.Structured` |
+| Response to text (storage) | `responseToText` | `Tapir.Types.Response` |
+| **Database** | | |
 | Save message | `saveMessage` | `Tapir.Db.Repository` |
 | Get messages | `getMessagesBySession` | `Tapir.Db.Repository` |
 | Create session | `createSession` | `Tapir.Db.Repository` |
 | List sessions | `listSessions` | `Tapir.Db.Repository` |
 | Delete session | `deleteSession` | `Tapir.Db.Repository` |
+| Save card | `saveCard` | `Tapir.Db.Repository` |
+| Update session timestamp | `updateSessionTimestamp` | `Tapir.Db.Repository` |
+| **Anki** | | |
 | Check Anki | `checkAnkiConnection` | `Tapir.Client.Anki` |
 | Add Anki note | `addNote` | `Tapir.Client.Anki` |
-| Convert card response to Anki card | `cardResponseToAnkiCard` | `Tapir.UI.App` |
+| **Core Utilities** | | |
+| Safe list operations | `safeHead`, `safeIndex`, etc. | `Tapir.Core.Error` |
+| Provider constants | `providerNameOpenRouter`, etc. | `Tapir.Core.Constants` |
+| API endpoint constants | `openRouterApiEndpoint`, etc. | `Tapir.Core.Constants` |
+| Environment variable names | `envOpenRouterApiKey`, etc. | `Tapir.Core.Constants` |
+| **UI** | | |
+| Draw UI | `drawUI` | `Tapir.UI.Draw` |
+| Execute command | `executeCommand` | `Tapir.UI.Command` |
+| Handle event | `handleEvent` | `Tapir.UI.Event` |
 
 ---
 
@@ -721,6 +926,7 @@ data TapirEvent
 | `S` | Save settings |
 | `R` | Reload config |
 | **Session List** | |
+| `J` / `K` | Navigate sessions |
 | `D` | Delete session |
 | `N` | New session |
 | **Card Preview** | |
@@ -750,29 +956,39 @@ async $ do
 **Problem:** `txtWrap` creates infinite-height widget, viewport crashes
 **Solution:** Use `txt` with manual wrapping via `word-wrap` package
 
-### 3. Windows Terminal Issues
-**Symptoms:** "GetConsoleScreenBufferInfo: invalid argument"
-**Cause:** Running in Git Bash or mintty
-**Solution:** Use Windows Terminal, PowerShell, or Command Prompt
-
-### 4. Missing API Key
+### 3. Missing API Key
 **Symptoms:** "API key not configured" error
 **Solutions:**
 - Set environment: `export OPENROUTER_API_KEY="sk-or-v1-..."`
 - Add to config.yaml: `api_key: "sk-or-v1-..."`
 
-### 5. Unicode Display Issues
+### 4. Unicode Display Issues
 **Symptoms:** Unicode characters display as boxes
 **Solutions:**
 - Ensure terminal supports UTF-8
 - Set locale: `export LANG=en_US.UTF-8`
 - Use a modern terminal (Windows Terminal, iTerm2, etc.)
 
-### 6. Language Module Not Found
+### 5. Language Module Not Found
 **Symptoms:** "Language module not found" error
 **Solutions:**
 - Ensure `~/.config/tapir/languages/spanish.yaml` exists
 - Check `active_language` in config matches filename (without `.yaml`)
+
+### 6. Using Partial Functions
+**Wrong:**
+```haskell
+let first = head xs  -- Crashes on empty list
+    fifth = xs !! 4  -- Crashes if list < 5 elements
+```
+
+**Right:**
+```haskell
+import Tapir.Core.Error (safeHead, safeIndex)
+
+let first = safeHead xs  -- Returns Maybe a
+    fifth = safeIndex xs 4  -- Returns Maybe a
+```
 
 ---
 
@@ -793,6 +1009,11 @@ cabal test --test-option=--match="/Repository/"
 
 ### Test Coverage
 - **LLM Types**: JSON serialization/parsing
+- **Provider**: Provider config parsing
+- **Response**: Structured response parsing
+- **Tools**: Tool definitions
+- **Request**: Request building
+- **Card**: Card extraction from responses
 - **Config Loader**: Prompt interpolation, YAML loading
 - **Database**: Schema, CRUD, transactions, foreign keys, cascades
 
@@ -917,19 +1138,16 @@ data: [DONE]
 - `uuid >= 1.3`
 
 ### TUI
-- `brick >= 2.1` - Main TUI framework
-- `vty >= 6.0` - Terminal handling
-- `vty-unix >= 0.2` - Unix terminal support
-- `vty-crossplatform` - Cross-platform terminal
+- `brick >= 2.4` - Main TUI framework
+- `vty-crossplatform >= 0.4` - Cross-platform terminal handling
 - `microlens >= 0.4` - Lens library
 - `microlens-th >= 0.4` - Template Haskell for lenses
 
 ### HTTP & JSON
-- `req >= 3.13` - HTTP client
+- `http-client >= 0.7` - HTTP client
+- `http-types >= 0.12` - HTTP types
 - `aeson >= 2.1` - JSON library
 - `aeson-pretty >= 0.8` - Pretty JSON printing
-- `http-client >= 0.7` - HTTP client backend
-- `http-types >= 0.12` - HTTP types
 
 ### Database
 - `sqlite-simple >= 0.4` - SQLite bindings
@@ -953,6 +1171,7 @@ data: [DONE]
 - `TypeApplications` - Explicit type application
 - `TemplateHaskell` - Lenses generation
 - `QuasiQuotes` - Raw string literals (SQL)
+- `ScopedTypeVariables` - Type variables in scope
 
 ---
 
@@ -968,10 +1187,95 @@ data: [DONE]
 
 ### Adding New Features
 1. Define types in appropriate `Tapir.Types.*` module
-2. Implement business logic in appropriate service module
+2. Implement business logic in `Tapir.Service.*` modules
 3. Update UI in `Tapir.UI.*` modules
 4. Add tests to `test/Tapir/`
 5. Update documentation if architectural patterns change
+
+### Adding a New LLM Provider
+
+1. **Define constants** in `Tapir.Core.Constants`:
+```haskell
+providerNameYourProvider :: Text
+providerNameYourProvider = "YourProvider"
+
+yourProviderApiEndpoint :: String
+yourProviderApiEndpoint = "https://api.example.com/v1/chat/completions"
+
+envYourProviderApiKey :: String
+envYourProviderApiKey = "YOURPROVIDER_API_KEY"
+```
+
+2. **Create provider file** `Tapir.Client.LLM.YourProvider.hs`:
+```haskell
+module Tapir.Client.LLM.YourProvider
+  ( mkClient
+  , checkConfigured
+  ) where
+
+import Tapir.Client.LLM.Base
+import Tapir.Core.Constants (yourProviderApiEndpoint, providerNameYourProvider)
+import Tapir.Types.Provider (ProviderConfig(..))
+
+-- Define provider endpoint
+yourProviderEndpoint :: ProviderEndpoint
+yourProviderEndpoint = ProviderEndpoint
+  { peBaseUrl      = yourProviderApiEndpoint
+  , peAuthHeader   = Just $ \key req -> addHeader "Authorization" ("Bearer " <> key) req
+  , peExtraHeaders = id  -- Add any required headers
+  , peRequiresAuth = True
+  }
+
+-- Create client
+mkClient :: ProviderConfig -> IO GenericLLMClient
+mkClient cfg = do
+  mgr <- newManager defaultManagerSettings
+  let getKey = case providerApiKey cfg of
+        Just k  -> pure $ Just k
+        Nothing -> lookupEnv envYourProviderApiKey
+  pure $ mkGenericClient mgr cfg yourProviderEndpoint getKey
+
+-- Check if configured
+checkConfigured :: ProviderConfig -> IO Bool
+checkConfigured cfg = do
+  mKey <- case providerApiKey cfg of
+    Just k  -> pure $ Just k
+    Nothing -> lookupEnv envYourProviderApiKey
+  pure $ isJust mKey
+```
+
+3. **Update client interface** in `Tapir.Client.LLM`:
+```haskell
+import qualified Tapir.Client.LLM.YourProvider as YourProvider
+
+mkLLMClient :: ProviderConfig -> IO LLMClient
+mkLLMClient cfg = case providerType cfg of
+  OpenRouter -> mkOpenRouterClient cfg
+  Anthropic  -> pure $ notImplementedClient "Anthropic"
+  OpenAI     -> mkOpenAIClient cfg
+  Ollama     -> mkOllamaClient cfg
+  YourProvider -> mkYourProviderClient cfg
+
+mkYourProviderClient :: ProviderConfig -> IO LLMClient
+mkYourProviderClient cfg = do
+  client <- YourProvider.mkClient cfg
+  pure LLMClient
+    { llmProviderName = providerNameYourProvider
+    , llmComplete = sendGenericRequest client
+    , llmStreamComplete = streamGenericRequest client
+    , llmIsConfigured = YourProvider.checkConfigured cfg
+    }
+```
+
+4. **Update ProviderType** in `Tapir.Types.Provider`:
+```haskell
+data ProviderType
+  = OpenRouter
+  | Anthropic
+  | OpenAI
+  | Ollama
+  | YourProvider  -- Add new provider
+```
 
 ### Debugging
 
@@ -997,14 +1301,15 @@ sqlite3 ~/.local/share/tapir/tapir.db "SELECT * FROM messages ORDER BY id DESC L
 This guide provides everything needed to work with TAPIR:
 
 1. **Quick Start** - Build commands and key file locations
-2. **Architecture** - Event flow, streaming, state management patterns
+2. **Architecture** - Layered architecture, service layer, event flow, LLM abstraction
 3. **Types** - Core domain types and UI types
 4. **Configuration** - YAML structure and prompt variables
 5. **Database** - Schema and repository functions
 6. **APIs** - OpenRouter and AnkiConnect integration
 7. **Troubleshooting** - Common issues and solutions
 8. **Testing** - Running and writing tests
+9. **Adding Providers** - Step-by-step guide for adding new LLM providers
 
 ---
 
-*Last Updated: January 23, 2026*
+*Last Updated: January 25, 2026*

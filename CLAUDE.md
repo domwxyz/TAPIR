@@ -27,8 +27,7 @@
 
 ### Known Issues
 
-- **Windows terminals**: Must use Windows Terminal/PowerShell (not Git Bash/mintty)
-- **Ctrl+, shortcut**: May not work on some terminals; use F2 as alternative
+None currently known
 
 ---
 
@@ -175,7 +174,7 @@ cabal build
 # Run tests
 cabal test --test-show-details=streaming
 
-# Run application (Windows: use Windows Terminal/PowerShell)
+# Run application
 cabal run tapir
 
 # Clean rebuild
@@ -193,18 +192,17 @@ cabal repl
 |-----|--------|
 | **Navigation** | |
 | `Tab` / `Shift+Tab` | Cycle modes |
-| `1-4` | Jump to mode |
 | `PageUp/Down` | Scroll history |
+| `Up/Down` | Scroll history (line) |
 | **Input** | |
 | `Enter` | Send message |
-| `?` | Help (when chat focused) |
 | **Sessions** | |
 | `Ctrl+N` | New session |
 | `Ctrl+S` | Sessions list |
 | `J` / `K` | Navigate list |
 | `D` | Delete session |
 | **Settings** | |
-| `F2` / `Ctrl+,` | Settings modal |
+| `F2` | Settings modal |
 | `+` / `-` | Cycle learner level |
 | `E` | View system prompt |
 | **Cards** | |
@@ -297,10 +295,6 @@ cabal test --test-option=--match="/Repository/"
 ---
 
 ## Troubleshooting
-
-### "GetConsoleScreenBufferInfo: invalid argument"
-- Running in Git Bash/mintty on Windows
-- Solution: Use Windows Terminal or PowerShell
 
 ### "API key not configured"
 - Check `~/.config/tapir/config.yaml` has `provider.api_key` set
