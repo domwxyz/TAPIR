@@ -14,7 +14,7 @@
 - **Configuration**: YAML config loading from `~/.config/tapir/config.yaml`
 - **Language Modules**: Spanish module loads from `~/.config/tapir/languages/spanish.yaml`
 - **Database**: SQLite with full schema, repository pattern, tested, message persistence
-- **LLM Client**: OpenRouter integration with tool/function calling for structured responses
+- **LLM Client**: Multi-provider support (OpenRouter, OpenAI, Ollama) with tool/function calling for structured responses
 - **Structured Responses**: Guaranteed JSON responses with mode-specific schemas
 - **Response Rendering**: Sectioned display for corrections, vocab, translation notes, card metadata
 - **TUI**: brick-based interface with chat, input, status bar, modals
@@ -43,35 +43,57 @@ TAPIR/
 │   │   ├── Mode.hs           # Mode enum
 │   │   ├── Language.hs       # LanguageInfo, LanguageModule
 │   │   ├── Provider.hs       # ProviderType, ProviderConfig
-│   │   └── Response.hs      # Structured response types
+│   │   └── Response.hs       # Structured response types
+│   ├── Core/                  # Core utilities
+│   │   ├── Constants.hs      # API endpoints, provider names, env vars
+│   │   ├── Error.hs          # Safe list operations, error handling
+│   │   └── Logging.hs        # Logging placeholder
 │   ├── Config/
 │   │   ├── Types.hs          # AppConfig, UIConfig, etc.
 │   │   ├── Loader.hs         # YAML loading, prompt interpolation
 │   │   └── Defaults.hs       # Default configuration
+│   ├── Service/               # Business logic layer
+│   │   ├── LLM.hs            # LLM request orchestration
+│   │   ├── Card.hs           # Card generation & Anki export
+│   │   └── Message.hs        # Message persistence
 │   ├── Client/
 │   │   ├── LLM.hs            # Abstract LLM interface
 │   │   ├── LLM/
+│   │   │   ├── Base.hs       # Generic OpenAI-compatible client
 │   │   │   ├── Types.hs      # ChatMessage, ChatRequest, ToolCall
 │   │   │   ├── Tools.hs      # Tool definitions
 │   │   │   ├── Request.hs    # Request building
 │   │   │   ├── Response.hs   # Response parsing
+│   │   │   ├── SSE.hs        # Server-Sent Events parser
 │   │   │   ├── OpenRouter.hs # OpenRouter implementation
 │   │   │   ├── OpenAI.hs     # OpenAI implementation
 │   │   │   └── Ollama.hs     # Ollama implementation (local)
 │   │   └── Anki.hs           # AnkiConnect client
 │   ├── Db/
 │   │   ├── Schema.hs         # Database initialization
-│   │   └── Repository.hs     # CRUD operations
+│   │   ├── Repository.hs     # CRUD operations
+│   │   └── Instances.hs      # SQLite type instances
 │   └── UI/
 │       ├── Types.hs          # AppState, TapirEvent, Name
-│       ├── App.hs            # Main brick app, event handling
+│       ├── App.hs            # Main brick app definition
+│       ├── Draw.hs           # Render UI to screen
+│       ├── Event.hs          # Main event dispatcher
+│       ├── Event/            # Event handlers
+│       │   ├── Main.hs       # Keyboard input handling
+│       │   ├── Custom.hs     # Async event processing
+│       │   ├── Message.hs    # Message send/receive
+│       │   ├── Session.hs    # Session management
+│       │   ├── Card.hs       # Card generation
+│       │   ├── Modal.hs      # Modal dialog events
+│       │   └── Settings.hs   # Settings modal events
 │       ├── Attrs.hs          # Color theme attributes
 │       ├── Widgets.hs        # Reusable widget helpers
 │       ├── Chat.hs           # Chat history display
 │       ├── Input.hs          # Text editor widget
 │       ├── StatusBar.hs      # Mode tabs, status info
 │       ├── Modals.hs         # Help, Settings, Sessions dialogs
-│       └── Structured.hs     # Structured response rendering
+│       ├── Structured.hs     # Structured response rendering
+│       └── Command.hs        # Command parsing/execution
 ├── test/                      # Test suite
 └── languages/                 # Template language modules
 ```
@@ -302,4 +324,4 @@ cabal test --test-option=--match="/Repository/"
 
 ---
 
-*Last Updated: January 23, 2026*
+*Last Updated: January 25, 2026*

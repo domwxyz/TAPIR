@@ -76,8 +76,6 @@ main = do
     -- Check for unimplemented providers
     case llmProviderName client of
       "Anthropic" -> putStrLn "[WARN] Anthropic provider is not yet implemented"
-      "OpenAI" -> putStrLn "[WARN] OpenAI provider is not yet implemented"
-      "Ollama" -> putStrLn "[WARN] Ollama provider is not yet implemented"
       _ -> pure ()
 
     -- Check API key

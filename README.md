@@ -18,7 +18,7 @@ A keyboard-driven TUI (Terminal User Interface) for language learning with:
 - **Language-agnostic design**: All language-specific logic lives in YAML configs - easily add new languages
 - **Command menu**: Ctrl+P for quick access to all commands
 - **Local persistence**: SQLite stores your learning history with automatic backups
-- **Privacy-focused**: Works with OpenRouter (more providers coming soon)
+- **Privacy-focused**: Works with OpenRouter, OpenAI, or local Ollama
 - **Full session management**: Create, list, load, delete sessions with complete message history
 - **Mode-specific prompts**: Each mode uses its own tailored system prompt with variable interpolation
 - **Adjustable difficulty**: Change CEFR level (A1-C2) on the fly from settings
@@ -28,7 +28,7 @@ A keyboard-driven TUI (Terminal User Interface) for language learning with:
 
 - **GHC** 9.6.3+ (tested with 9.8.2, 9.10.1)
 - **Cabal** 3.10+
-- **OpenRouter API key** (currently the only supported provider)
+- **LLM API access**: OpenRouter, OpenAI, or local Ollama
 - **Anki** (optional): For flashcard integration, requires [AnkiConnect](https://ankiweb.net/shared/info/2055492159) plugin
 
 ## Quick Start
@@ -236,6 +236,10 @@ Schema supports:
 TAPIR/
 ├── app/                    # Executable entry point
 ├── src/Tapir/             # Library source
+│   ├── Core/              # Core utilities
+│   │   ├── Constants.hs   # API endpoints, provider names
+│   │   ├── Error.hs       # Safe list operations, error handling
+│   │   └── Logging.hs     # Logging placeholder
 │   ├── Types/             # Core domain types
 │   │   ├── Mode.hs        # Learning modes
 │   │   ├── Language.hs    # Language module types
@@ -245,27 +249,47 @@ TAPIR/
 │   │   ├── Types.hs       # Config types
 │   │   ├── Loader.hs      # YAML loading & validation
 │   │   └── Defaults.hs    # Default configurations
+│   ├── Service/           # Business logic layer
+│   │   ├── LLM.hs         # LLM request orchestration
+│   │   ├── Card.hs        # Card generation & Anki export
+│   │   └── Message.hs     # Message persistence
 │   ├── UI/                # Brick TUI components
-│   │   ├── App.hs         # Main app & event handling
+│   │   ├── App.hs         # Main app definition
 │   │   ├── Types.hs       # UI state types
+│   │   ├── Draw.hs        # Render UI to screen
+│   │   ├── Event.hs       # Main event dispatcher
+│   │   ├── Event/         # Event handlers
+│   │   │   ├── Main.hs        # Keyboard input
+│   │   │   ├── Custom.hs      # Async responses
+│   │   │   ├── Message.hs     # Message events
+│   │   │   ├── Session.hs     # Session events
+│   │   │   ├── Card.hs        # Card events
+│   │   │   ├── Modal.hs       # Modal events
+│   │   │   └── Settings.hs    # Settings events
 │   │   ├── Attrs.hs       # Color schemes
 │   │   ├── Chat.hs        # Chat history display
 │   │   ├── Input.hs       # Text input widget
 │   │   ├── StatusBar.hs   # Bottom status bar
 │   │   ├── Modals.hs      # Modal dialogs
 │   │   ├── Structured.hs  # Structured response rendering
-│   │   └── Widgets.hs     # Reusable widgets
+│   │   ├── Widgets.hs     # Reusable widgets
+│   │   └── Command.hs     # Command parsing/execution
 │   ├── Client/            # LLM & Anki clients
 │   │   ├── LLM/           # LLM abstraction
+│   │   │   ├── Base.hs        # Generic OpenAI-compatible client
 │   │   │   ├── Types.hs       # Request/response types
 │   │   │   ├── OpenRouter.hs  # OpenRouter implementation
+│   │   │   ├── OpenAI.hs      # OpenAI implementation
+│   │   │   ├── Ollama.hs      # Ollama implementation (local)
 │   │   │   ├── Tools.hs       # Tool/function definitions
 │   │   │   ├── Request.hs     # Request building
-│   │   │   └── Response.hs    # Response parsing
+│   │   │   ├── Response.hs    # Response parsing
+│   │   │   └── SSE.hs         # Server-Sent Events parser
 │   │   └── Anki.hs        # AnkiConnect integration
 │   ├── Db/                # Database layer
 │   │   ├── Schema.hs      # DDL & migrations
-│   │   └── Repository.hs  # CRUD operations
+│   │   ├── Repository.hs  # CRUD operations
+│   │   └── Instances.hs   # SQLite type instances
 │   └── Types.hs           # Re-export hub
 ├── test/                  # Test suite
 ├── config/                # Default configuration
@@ -313,8 +337,8 @@ TAPIR follows a clean architecture with:
 
 ## Current Limitations
 
-- **Provider support**: Only OpenRouter is currently implemented
-  - Anthropic, OpenAI, and Ollama support is planned
+- **Provider support**: OpenRouter, OpenAI, and Ollama are implemented
+  - Anthropic support is planned
 - **Language modules**: Only Spanish is included
   - Community contributions for other languages welcome!
 
@@ -369,7 +393,7 @@ rm ~/.local/share/tapir/tapir.db
 Contributions welcome! Areas of interest:
 
 - **Language modules**: Add support for more languages
-- **Provider implementations**: Anthropic, OpenAI, Ollama
+- **Provider implementations**: Anthropic
 - **UI improvements**: Themes, layouts, widgets
 - **Features**: Spaced repetition, grammar drills, pronunciation practice
 - **Documentation**: Tutorials, screencasts, guides
@@ -380,5 +404,5 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Last Updated**: January 24, 2026 
+**Last Updated**: January 25, 2026
 **Tested On**: Linux (Debian 13), Windows 10
