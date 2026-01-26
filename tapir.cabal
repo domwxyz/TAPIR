@@ -40,9 +40,12 @@ library
   import: shared-properties
   hs-source-dirs: src
   exposed-modules:
+    Tapir.Core
     Tapir.Core.Constants
     Tapir.Core.Error
     Tapir.Core.Logging
+    Tapir.Core.Parse
+    Tapir.Core.Selection
     Tapir.Types
     Tapir.Types.Mode
     Tapir.Types.Language
@@ -155,6 +158,8 @@ test-suite tapir-test
     hspec-discover:hspec-discover >=2.10 && <2.12
   other-modules:
     Tapir.Config.LoaderSpec
+    Tapir.Core.ParseSpec
+    Tapir.Core.SelectionSpec
     Tapir.Db.RepositorySpec
     Tapir.Client.LLM.TypesSpec
     Tapir.Client.LLM.OpenAISpec

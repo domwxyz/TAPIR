@@ -6,6 +6,7 @@ import Test.Hspec
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 
 import Tapir.Service.Card
+import Tapir.Core.Parse (stripMarkdownFences)
 import Tapir.Types (AnkiCard(..))
 
 spec :: Spec

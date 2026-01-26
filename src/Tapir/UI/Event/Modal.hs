@@ -24,9 +24,10 @@ import Lens.Micro.Mtl ((.=))
 
 import Tapir.Types (AnkiCard)
 import Tapir.UI.Types
-import Tapir.UI.Widgets (safeIndex)
+import Tapir.Core.Selection (Selection, SelectionEmpty(..))
+import qualified Tapir.Core.Selection as Sel
 import Tapir.UI.Command (executeCommand)
-import Tapir.UI.Event.Session (handleSessionSelect, handleSessionDelete, handleSessionNew)
+import Tapir.UI.Event.Session (handleSessionSelectFromSelection, handleSessionDeleteFromSelection, handleSessionNew)
 import Tapir.UI.Event.Card (handleCardPush, handleCardDiscard)
 import Tapir.UI.Event.Settings (handleSettingsSave, handleSettingsReload, handleViewPrompt, cycleLearnerLevel)
 
@@ -36,11 +37,11 @@ handleModalEvent ev = do
   st <- get
   case _asModal st of
     HelpModal            -> handleHelpModal ev
-    CommandMenuModal idx -> handleCommandMenuModal ev idx
+    CommandMenuModal sel -> handleCommandMenuModal ev sel
     ConfirmQuitModal     -> handleConfirmQuitModal ev
     SettingsModal        -> handleSettingsModal ev
     CardPreviewModal card -> handleCardPreviewModal ev card
-    SessionsModal sums idx -> handleSessionsModal ev sums idx
+    SessionsModal eSel   -> handleSessionsModal ev eSel
     ErrorModal _         -> handleDismissableModal ev
     PromptPreviewModal _ -> handleDismissableModal ev
     NoModal              -> pure ()
@@ -52,18 +53,16 @@ handleHelpModal ev = case ev of
   _         -> pure ()
 
 -- | Handle command menu modal navigation and selection
-handleCommandMenuModal :: Event -> Int -> EventM Name AppState ()
-handleCommandMenuModal ev idx = case ev of
+handleCommandMenuModal :: Event -> Selection Command -> EventM Name AppState ()
+handleCommandMenuModal ev sel = case ev of
   EvKey KEsc []        -> asModal .= NoModal
-  EvKey (KChar 'j') [] -> asModal .= CommandMenuModal (min (idx + 1) (commandCount - 1))
-  EvKey KDown []       -> asModal .= CommandMenuModal (min (idx + 1) (commandCount - 1))
-  EvKey (KChar 'k') [] -> asModal .= CommandMenuModal (max (idx - 1) 0)
-  EvKey KUp []         -> asModal .= CommandMenuModal (max (idx - 1) 0)
+  EvKey (KChar 'j') [] -> asModal .= CommandMenuModal (Sel.moveNext sel)
+  EvKey KDown []       -> asModal .= CommandMenuModal (Sel.moveNext sel)
+  EvKey (KChar 'k') [] -> asModal .= CommandMenuModal (Sel.movePrev sel)
+  EvKey KUp []         -> asModal .= CommandMenuModal (Sel.movePrev sel)
   EvKey KEnter []      -> do
     asModal .= NoModal
-    case safeIndex allCommands idx of
-      Just cmd -> executeCommand cmd
-      Nothing  -> pure ()
+    executeCommand (Sel.selected sel)
   _                    -> pure ()
 
 -- | Handle confirm quit modal
@@ -97,16 +96,25 @@ handleCardPreviewModal ev card = case ev of
   _                    -> pure ()
 
 -- | Handle sessions modal
-handleSessionsModal :: Event -> [SessionSummary] -> Int -> EventM Name AppState ()
-handleSessionsModal ev sums idx = case ev of
+handleSessionsModal :: Event -> Either SelectionEmpty (Selection SessionSummary) -> EventM Name AppState ()
+handleSessionsModal ev eSel = case ev of
   EvKey KEsc []        -> asModal .= NoModal
-  EvKey (KChar 'j') [] -> asModal .= SessionsModal sums (min (idx + 1) (length sums - 1))
-  EvKey KDown []       -> asModal .= SessionsModal sums (min (idx + 1) (length sums - 1))
-  EvKey (KChar 'k') [] -> asModal .= SessionsModal sums (max (idx - 1) 0)
-  EvKey KUp []         -> asModal .= SessionsModal sums (max (idx - 1) 0)
-  EvKey KEnter []      -> handleSessionSelect sums idx
-  EvKey (KChar 'd') [] -> handleSessionDelete sums idx
   EvKey (KChar 'n') [] -> handleSessionNew
+  _ -> case eSel of
+    Left SelectionEmpty ->
+      -- Empty list - only allow close or new
+      pure ()
+    Right sel -> handleSessionsModalWithSelection ev sel
+
+-- | Handle sessions modal when we have items
+handleSessionsModalWithSelection :: Event -> Selection SessionSummary -> EventM Name AppState ()
+handleSessionsModalWithSelection ev sel = case ev of
+  EvKey (KChar 'j') [] -> asModal .= SessionsModal (Right $ Sel.moveNext sel)
+  EvKey KDown []       -> asModal .= SessionsModal (Right $ Sel.moveNext sel)
+  EvKey (KChar 'k') [] -> asModal .= SessionsModal (Right $ Sel.movePrev sel)
+  EvKey KUp []         -> asModal .= SessionsModal (Right $ Sel.movePrev sel)
+  EvKey KEnter []      -> handleSessionSelectFromSelection sel
+  EvKey (KChar 'd') [] -> handleSessionDeleteFromSelection sel
   _                    -> pure ()
 
 -- | Handle dismissable modals (any key closes)

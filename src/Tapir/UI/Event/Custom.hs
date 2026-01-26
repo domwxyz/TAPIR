@@ -22,6 +22,7 @@ import Lens.Micro.Mtl ((.=), (%=))
 import Tapir.Types
 import Tapir.Types.Response (StructuredResponse(..), responseToText)
 import Tapir.UI.Types
+import qualified Tapir.Core.Selection as Sel
 import Tapir.Db.Repository (saveMessage, saveCard, updateSessionTimestamp)
 import Tapir.Service.Card (extractCardFromResponse, cardResponseToAnkiCard)
 import Tapir.Service.Message (mkAssistantMessage, AssistantMessageParams(..))
@@ -54,7 +55,7 @@ handleCustomEvent = \case
       asLastError .= Just err
 
   EvSessionsLoaded summaries ->
-    asModal .= SessionsModal summaries 0
+    asModal .= SessionsModal (Sel.fromList summaries)
 
   EvMessagesLoaded msgs ->
     asMessages .= msgs

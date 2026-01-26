@@ -11,6 +11,8 @@ module Tapir.UI.Event.Session
   , handleLoadSessions
   , handleSessionSelect
   , handleSessionDelete
+  , handleSessionSelectFromSelection
+  , handleSessionDeleteFromSelection
   , handleSessionNew
   , sessionToSummary
   ) where
@@ -28,7 +30,8 @@ import Lens.Micro.Mtl ((.=))
 import Tapir.Types
 import Tapir.UI.Types
 import Tapir.UI.Input (mkInputEditor)
-import Tapir.UI.Widgets (safeIndex)
+import Tapir.Core.Selection (Selection, SelectionEmpty(..))
+import qualified Tapir.Core.Selection as Sel
 import Tapir.Db.Repository (createSession, getRecentSessions, getSessionMessages, deleteSession)
 
 -- | Handle Ctrl+N - create new session from main view
@@ -73,65 +76,75 @@ handleLoadSessions = do
       Left _ ->
         -- On error, show empty list
         writeBChan chan (EvSessionsLoaded [])
-  -- Show modal immediately with loading state (empty list)
-  asModal .= SessionsModal [] 0
+  -- Show modal immediately with loading state (empty selection)
+  asModal .= SessionsModal (Left SelectionEmpty)
 
--- | Handle session selection from sessions modal
+-- | Handle session selection from sessions modal (using Selection)
+handleSessionSelectFromSelection :: Selection SessionSummary -> EventM Name AppState ()
+handleSessionSelectFromSelection sel = do
+  let selectedSummary = Sel.selected sel
+  st <- get
+  let sid = summaryId selectedSummary
+      conn = _asDbConnection st
+      chan = _asEventChannel st
+
+  -- Load messages for the selected session asynchronously
+  liftIO $ void $ forkIO $ do
+    result <- getSessionMessages conn sid
+    case result of
+      Right msgs -> writeBChan chan (EvMessagesLoaded msgs)
+      Left _ -> writeBChan chan (EvMessagesLoaded [])
+
+  -- Update session info in state immediately
+  now <- liftIO getCurrentTime
+  let newSession = Session
+        { sessionId = sid
+        , sessionLanguageId = summaryLanguageId selectedSummary
+        , sessionMode = summaryMode selectedSummary
+        , sessionLearnerLevel = learnerLevel (_asLangModule st)
+        , sessionCreatedAt = now
+        , sessionUpdatedAt = summaryLastActivity selectedSummary
+        , sessionTitle = Just (summaryTitle selectedSummary)
+        , sessionActive = True
+        }
+  asSession .= newSession
+  asCurrentMode .= summaryMode selectedSummary
+  asMessages .= []
+  asModal .= NoModal
+
+-- | Handle session deletion from sessions modal (using Selection)
+handleSessionDeleteFromSelection :: Selection SessionSummary -> EventM Name AppState ()
+handleSessionDeleteFromSelection sel = do
+  let selectedSummary = Sel.selected sel
+  st <- get
+  let sid = summaryId selectedSummary
+      conn = _asDbConnection st
+      chan = _asEventChannel st
+  -- Delete session asynchronously
+  liftIO $ void $ forkIO $ do
+    _ <- deleteSession conn sid
+    -- Reload sessions list
+    result <- getRecentSessions conn 50
+    case result of
+      Right sessionsWithCount ->
+        writeBChan chan (EvSessionsLoaded (map sessionToSummary sessionsWithCount))
+      Left _ ->
+        writeBChan chan (EvSessionsLoaded [])
+  asModal .= NoModal
+
+-- | Handle session selection from sessions modal (legacy, delegates to Selection-based version)
 handleSessionSelect :: [SessionSummary] -> Int -> EventM Name AppState ()
 handleSessionSelect sums idx =
-  case safeIndex sums idx of
-    Nothing -> pure ()
-    Just selectedSummary -> do
-      st <- get
-      let sid = summaryId selectedSummary
-          conn = _asDbConnection st
-          chan = _asEventChannel st
+  case Sel.fromList sums of
+    Left SelectionEmpty -> pure ()
+    Right sel -> handleSessionSelectFromSelection (Sel.moveToIndex idx sel)
 
-      -- Load messages for the selected session asynchronously
-      liftIO $ void $ forkIO $ do
-        result <- getSessionMessages conn sid
-        case result of
-          Right msgs -> writeBChan chan (EvMessagesLoaded msgs)
-          Left _ -> writeBChan chan (EvMessagesLoaded [])
-
-      -- Update session info in state immediately
-      now <- liftIO getCurrentTime
-      let newSession = Session
-            { sessionId = sid
-            , sessionLanguageId = summaryLanguageId selectedSummary
-            , sessionMode = summaryMode selectedSummary
-            , sessionLearnerLevel = learnerLevel (_asLangModule st)
-            , sessionCreatedAt = now
-            , sessionUpdatedAt = summaryLastActivity selectedSummary
-            , sessionTitle = Just (summaryTitle selectedSummary)
-            , sessionActive = True
-            }
-      asSession .= newSession
-      asCurrentMode .= summaryMode selectedSummary
-      asMessages .= []
-      asModal .= NoModal
-
--- | Handle session deletion from sessions modal
+-- | Handle session deletion from sessions modal (legacy, delegates to Selection-based version)
 handleSessionDelete :: [SessionSummary] -> Int -> EventM Name AppState ()
 handleSessionDelete sums idx =
-  case safeIndex sums idx of
-    Nothing -> pure ()
-    Just selectedSummary -> do
-      st <- get
-      let sid = summaryId selectedSummary
-          conn = _asDbConnection st
-          chan = _asEventChannel st
-      -- Delete session asynchronously
-      liftIO $ void $ forkIO $ do
-        _ <- deleteSession conn sid
-        -- Reload sessions list
-        result <- getRecentSessions conn 50
-        case result of
-          Right sessionsWithCount ->
-            writeBChan chan (EvSessionsLoaded (map sessionToSummary sessionsWithCount))
-          Left _ ->
-            writeBChan chan (EvSessionsLoaded [])
-      asModal .= NoModal
+  case Sel.fromList sums of
+    Left SelectionEmpty -> pure ()
+    Right sel -> handleSessionDeleteFromSelection (Sel.moveToIndex idx sel)
 
 -- | Handle new session creation from sessions modal
 handleSessionNew :: EventM Name AppState ()

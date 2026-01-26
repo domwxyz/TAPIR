@@ -34,9 +34,11 @@ import qualified Data.Text as T
 import Data.Time (formatTime, defaultTimeLocale)
 
 import Tapir.Types
-import Tapir.UI.Types (Name(..), Modal(..), AppState(..), SessionSummary(..), Command(..), allCommands, commandName, commandKeybind)
+import Tapir.UI.Types (Name(..), Modal(..), AppState(..), SessionSummary(..), Command(..), commandName, commandKeybind)
 import Tapir.UI.Attrs
 import Tapir.UI.Widgets (keyHintRow)
+import Tapir.Core.Selection (Selection, SelectionEmpty(..))
+import qualified Tapir.Core.Selection as Sel
 
 -- ════════════════════════════════════════════════════════════════
 -- MODAL DISPATCHER
@@ -47,11 +49,11 @@ renderModal :: AppState -> Widget Name
 renderModal st = case _asModal st of
   NoModal              -> emptyWidget
   HelpModal            -> renderHelpModal
-  CommandMenuModal idx -> renderCommandMenuModal idx
+  CommandMenuModal sel -> renderCommandMenuModal sel
   SettingsModal        -> renderSettingsModal st
   PromptPreviewModal prompt -> renderPromptPreviewModal prompt
   CardPreviewModal card -> renderCardPreviewModal card
-  SessionsModal sums idx -> renderSessionsModal sums idx
+  SessionsModal eSel   -> renderSessionsModal eSel
   ConfirmQuitModal     -> renderConfirmQuitModal
   ErrorModal err       -> renderErrorModal err
 
@@ -107,24 +109,26 @@ renderKeybind key desc =
 -- ════════════════════════════════════════════════════════════════
 
 -- | Render command menu modal
-renderCommandMenuModal :: Int -> Widget Name
-renderCommandMenuModal selectedIdx =
-  centerLayer $
-  withAttr attrModalBorder $
-  withBorderStyle unicodeRounded $
-  borderWithLabel (withAttr attrModalTitle $ txt " Commands ") $
-  padAll 1 $
-  hLimit 40 $
-  vBox
-    [ vBox $ zipWith (renderCommandRow selectedIdx) [0..] allCommands
-    , txt " "
-    , hBorder
-    , padTop (Pad 1) $ hCenter $ keyHintRow
-        [ ("Enter", "Execute")
-        , ("j/k", "Navigate")
-        , ("Esc", "Close")
-        ]
-    ]
+renderCommandMenuModal :: Selection Command -> Widget Name
+renderCommandMenuModal sel =
+  let selectedIdx = Sel.selectedIndex sel
+      commands = Sel.toList sel
+  in centerLayer $
+     withAttr attrModalBorder $
+     withBorderStyle unicodeRounded $
+     borderWithLabel (withAttr attrModalTitle $ txt " Commands ") $
+     padAll 1 $
+     hLimit 40 $
+     vBox
+       [ vBox $ zipWith (renderCommandRow selectedIdx) [0..] commands
+       , txt " "
+       , hBorder
+       , padTop (Pad 1) $ hCenter $ keyHintRow
+           [ ("Enter", "Execute")
+           , ("j/k", "Navigate")
+           , ("Esc", "Close")
+           ]
+       ]
 
 -- | Render a single command row
 renderCommandRow :: Int -> Int -> Command -> Widget Name
@@ -241,28 +245,33 @@ renderCardPreviewModal AnkiCard{..} =
 -- ════════════════════════════════════════════════════════════════
 
 -- | Render sessions list modal
-renderSessionsModal :: [SessionSummary] -> Int -> Widget Name
-renderSessionsModal summaries selectedIdx =
-  centerLayer $
-  withAttr attrModalBorder $
-  withBorderStyle unicodeRounded $
-  borderWithLabel (withAttr attrModalTitle $ txt " Sessions ") $
-  padAll 1 $
-  hLimit 70 $
-  vBox
-    [ vLimit 14 $  -- Fixed height for session list, allows scrolling
-      viewport NameSessionList Vertical $
-      vBox $ zipWith (renderSessionRow selectedIdx) [0..] summaries
-    , txt " "
-    , hBorder
-    , padTop (Pad 1) $ hCenter $ keyHintRow
-        [ ("Enter", "Select")
-        , ("j/k", "Navigate")
-        , ("n", "New")
-        , ("d", "Delete")
-        , ("Esc", "Close")
-        ]
-    ]
+renderSessionsModal :: Either SelectionEmpty (Selection SessionSummary) -> Widget Name
+renderSessionsModal eSel =
+  let (summaries, selectedIdx) = case eSel of
+        Left SelectionEmpty -> ([], 0)
+        Right sel -> (Sel.toList sel, Sel.selectedIndex sel)
+      content = if null summaries
+                then txt "No sessions. Press 'n' to create one."
+                else vBox $ zipWith (renderSessionRow selectedIdx) [0..] summaries
+  in centerLayer $
+     withAttr attrModalBorder $
+     withBorderStyle unicodeRounded $
+     borderWithLabel (withAttr attrModalTitle $ txt " Sessions ") $
+     padAll 1 $
+     hLimit 70 $
+     vBox
+       [ vLimit 14 $  -- Fixed height for session list, allows scrolling
+         viewport NameSessionList Vertical content
+       , txt " "
+       , hBorder
+       , padTop (Pad 1) $ hCenter $ keyHintRow
+           [ ("Enter", "Select")
+           , ("j/k", "Navigate")
+           , ("n", "New")
+           , ("d", "Delete")
+           , ("Esc", "Close")
+           ]
+       ]
 
 -- | Render a single session row
 renderSessionRow :: Int -> Int -> SessionSummary -> Widget Name

@@ -24,6 +24,7 @@ import Lens.Micro.Mtl ((.=))
 import Tapir.Types
 import Tapir.UI.Types
 import Tapir.UI.Input (mkInputEditor)
+import Tapir.Core.Selection (SelectionEmpty(..))
 import Tapir.Db.Repository (createSession, getRecentSessions)
 import Tapir.UI.Event.Session (sessionToSummary)
 
@@ -63,7 +64,7 @@ executeCommand = \case
           writeBChan chan (EvSessionsLoaded summaries)
         Left _ ->
           writeBChan chan (EvSessionsLoaded [])
-    asModal .= SessionsModal [] 0
+    asModal .= SessionsModal (Left SelectionEmpty)
 
   CmdSettings ->
     asModal .= SettingsModal

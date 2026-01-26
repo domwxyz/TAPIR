@@ -45,7 +45,7 @@ handleMainEvent ev = case ev of
       _ -> asModal .= ConfirmQuitModal
 
   -- Command menu (Ctrl+P)
-  EvKey (KChar 'p') [MCtrl] -> asModal .= CommandMenuModal 0
+  EvKey (KChar 'p') [MCtrl] -> asModal .= CommandMenuModal mkCommandSelection
 
   -- Help (F1)
   EvKey (KFun 1) [] -> asModal .= HelpModal

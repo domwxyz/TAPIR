@@ -31,7 +31,7 @@ module Tapir.UI.Types
   , commandKeybind
   , commandDescription
   , allCommands
-  , commandCount
+  , mkCommandSelection
 
     -- * Request State
   , RequestState(..)
@@ -76,11 +76,15 @@ import Data.Time (UTCTime)
 import Database.SQLite.Simple (Connection)
 import Lens.Micro.TH (makeLenses)
 
+import Data.List.NonEmpty (NonEmpty(..))
+
 import Tapir.Types
 import Tapir.Types.Response (StructuredResponse)
 import Tapir.Config.Types (AppConfig)
 import Tapir.Client.LLM (LLMClient)
 import Tapir.Client.Anki (AnkiClient)
+import Tapir.Core.Selection (Selection, SelectionEmpty(..))
+import qualified Tapir.Core.Selection as Sel
 
 -- ════════════════════════════════════════════════════════════════
 -- RESOURCE NAMES
@@ -116,15 +120,15 @@ data Focus
 
 -- | Modal dialog state
 data Modal
-  = NoModal                          -- ^ No modal visible
-  | HelpModal                        -- ^ Help/keybindings overlay
-  | CommandMenuModal !Int            -- ^ Command palette with selected index into allCommands
-  | SessionsModal ![SessionSummary] !Int  -- ^ Session list with current index
-  | CardPreviewModal !AnkiCard       -- ^ Card preview/edit before push
-  | SettingsModal                    -- ^ Settings dialog
-  | PromptPreviewModal !Text          -- ^ System prompt preview modal
-  | ConfirmQuitModal                 -- ^ Confirm quit dialog
-  | ErrorModal !TapirError           -- ^ Error display modal
+  = NoModal                                                    -- ^ No modal visible
+  | HelpModal                                                  -- ^ Help/keybindings overlay
+  | CommandMenuModal !(Selection Command)                      -- ^ Command palette with selection
+  | SessionsModal !(Either SelectionEmpty (Selection SessionSummary))  -- ^ Session list (may be empty during loading)
+  | CardPreviewModal !AnkiCard                                 -- ^ Card preview/edit before push
+  | SettingsModal                                              -- ^ Settings dialog
+  | PromptPreviewModal !Text                                   -- ^ System prompt preview modal
+  | ConfirmQuitModal                                           -- ^ Confirm quit dialog
+  | ErrorModal !TapirError                                     -- ^ Error display modal
   deriving (Eq, Show)
 
 -- ════════════════════════════════════════════════════════════════
@@ -175,9 +179,9 @@ commandDescription = \case
 allCommands :: [Command]
 allCommands = [minBound .. maxBound]
 
--- | Number of commands (for bounds checking)
-commandCount :: Int
-commandCount = length allCommands
+-- | Create a command menu selection (guaranteed non-empty since commands are static)
+mkCommandSelection :: Selection Command
+mkCommandSelection = Sel.fromNonEmpty (CmdNewSession :| [CmdSessionList, CmdSettings, CmdShowCard, CmdHelp, CmdQuit])
 
 -- ════════════════════════════════════════════════════════════════
 -- REQUEST STATE

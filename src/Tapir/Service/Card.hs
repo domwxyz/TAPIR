@@ -19,7 +19,6 @@ module Tapir.Service.Card
   , parseJsonCard
   , parseLabeledCard
   , parseSimpleCard
-  , stripMarkdownFences
   ) where
 
 import Control.Applicative ((<|>))
@@ -37,6 +36,7 @@ import Data.Time (UTCTime)
 import Tapir.Types (AnkiCard(..))
 import Tapir.Types.Response (CardResponse(..))
 import Tapir.Core.Constants (ankiDefaultDeckSuffix)
+import Tapir.Core.Parse (stripMarkdownFences)
 
 -- | Extract a flashcard from an LLM response
 -- Tries multiple parsing strategies in order:
@@ -78,20 +78,6 @@ parseJsonCard langId sessionId' sourceMsgId response now = do
             _ -> [langId]
       pure $ mkCard langId sessionId' sourceMsgId front back tags now
     _ -> Nothing
-
--- | Strip markdown code fences (```json ... ``` or ``` ... ```)
-stripMarkdownFences :: Text -> Text
-stripMarkdownFences text =
-  let lines' = T.lines text
-      firstNonBlank = dropWhile (T.null . T.strip) lines'
-  in case firstNonBlank of
-    (l:rest)
-      | "```" `T.isPrefixOf` l ->
-          -- Find closing fence
-          case break ("```" `T.isPrefixOf`) rest of
-            (content, _:_) -> T.unlines content
-            (content, []) -> T.unlines content
-    _ -> text
 
 -- | Try "Front: ...\nBack: ..." format (case-insensitive)
 parseLabeledCard

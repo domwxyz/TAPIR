@@ -70,47 +70,38 @@ module Tapir.Db.Repository
   ) where
 
 import Control.Exception (try)
-import Data.Aeson (encode, decode)
+import Data.Aeson (encode)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
 import qualified Data.ByteString.Lazy as BL
 import Data.Time (UTCTime, getCurrentTime)
-import Data.Time.Format.ISO8601 (iso8601Show, iso8601ParseM)
 import Database.SQLite.Simple (Connection, Only(..), query, query_, execute, execute_, lastInsertRowId, SQLError, (:.)(..))
 
 import Tapir.Types
+import Tapir.Core.Parse (parseUTCTimeMaybe, formatUTCTime, parseTagsOrEmpty)
 import Tapir.Db.Instances ()  -- Import for SQLite instances
 
 -- ════════════════════════════════════════════════════════════════
 -- TIME AND TAG HELPERS
 -- ════════════════════════════════════════════════════════════════
 
--- | Store UTCTime as ISO 8601 text
+-- | Store UTCTime as ISO 8601 text (alias to Parse module)
 utcToText :: UTCTime -> Text
-utcToText = T.pack . iso8601Show
+utcToText = formatUTCTime
 
+-- | Parse UTC time from text (alias to Parse module)
 textToUtc :: Text -> Maybe UTCTime
-textToUtc = iso8601ParseM . T.unpack
+textToUtc = parseUTCTimeMaybe
 
 -- | Store [Text] as JSON array
 tagsToText :: [Text] -> Text
 tagsToText tags = TE.decodeUtf8 $ BL.toStrict $ encode tags
 
--- | Parse tags from JSON, returning empty list for invalid JSON.
---
--- Design decision: Returns empty list on parse failure because:
--- 1. Tags are non-critical metadata - missing tags don't break functionality
--- 2. The original JSON is preserved in the database, so no data is lost
--- 3. Failed parsing usually indicates empty or legacy data, not corruption
---
--- If tags become critical, consider using 'Either Text [Text]' instead.
+-- | Parse tags from JSON (alias to Parse module).
+-- Returns empty list on parse failure - see Tapir.Core.Parse for design rationale.
 textToTags :: Text -> [Text]
-textToTags txt
-  | T.null txt = []
-  | otherwise = case decode (BL.fromStrict $ TE.encodeUtf8 txt) of
-      Just tags -> tags
-      Nothing   -> []
+textToTags = parseTagsOrEmpty
 
 -- ════════════════════════════════════════════════════════════════
 -- SESSION OPERATIONS
