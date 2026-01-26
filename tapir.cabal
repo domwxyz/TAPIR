@@ -67,6 +67,7 @@ library
     Tapir.Client.Anki
     Tapir.Service.Card
     Tapir.Service.LLM
+    Tapir.Service.Message
     Tapir.UI.Types
     Tapir.UI.Attrs
     Tapir.UI.Widgets

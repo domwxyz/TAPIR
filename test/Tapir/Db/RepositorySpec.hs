@@ -115,20 +115,20 @@ spec = do
       now <- getCurrentTime
       let session = makeTestSession now "test-session-1"
 
-      -- Create
+      -- Create (now returns Either TapirError ())
       createResult <- createSession conn session
-      createResult `shouldBe` Right session
+      createResult `shouldBe` Right ()
 
-      -- Retrieve
+      -- Retrieve (now returns Maybe Session)
       getResult <- getSession conn "test-session-1"
       case getResult of
-        Right (Just s) -> do
+        Just s -> do
           sessionId s `shouldBe` "test-session-1"
           sessionLanguageId s `shouldBe` "spanish"
           sessionMode s `shouldBe` Conversation
           sessionLearnerLevel s `shouldBe` A1
           sessionActive s `shouldBe` True
-        _ -> expectationFailure "Failed to retrieve session"
+        Nothing -> expectationFailure "Failed to retrieve session"
 
     it "updates session title" $ withTestDb $ \conn -> do
       now <- getCurrentTime
@@ -139,8 +139,8 @@ spec = do
 
       getResult <- getSession conn "test-session-2"
       case getResult of
-        Right (Just s) -> sessionTitle s `shouldBe` Just "My Spanish Chat"
-        _ -> expectationFailure "Failed to retrieve updated session"
+        Just s -> sessionTitle s `shouldBe` Just "My Spanish Chat"
+        Nothing -> expectationFailure "Failed to retrieve updated session"
 
     it "archives a session" $ withTestDb $ \conn -> do
       now <- getCurrentTime
@@ -151,8 +151,8 @@ spec = do
 
       getResult <- getSession conn "test-session-3"
       case getResult of
-        Right (Just s) -> sessionActive s `shouldBe` False
-        _ -> expectationFailure "Failed to retrieve archived session"
+        Just s -> sessionActive s `shouldBe` False
+        Nothing -> expectationFailure "Failed to retrieve archived session"
 
     it "lists active sessions only" $ withTestDb $ \conn -> do
       now <- getCurrentTime
@@ -191,9 +191,9 @@ spec = do
       -- Delete session
       _ <- deleteSession conn "to-delete"
 
-      -- Verify session is gone
+      -- Verify session is gone (now returns Maybe Session)
       getResult <- getSession conn "to-delete"
-      getResult `shouldBe` Right Nothing
+      getResult `shouldBe` Nothing
 
       -- Verify message is also gone (cascade delete)
       messagesAfter <- getSessionMessages conn "to-delete"
@@ -290,10 +290,10 @@ spec = do
 
               getResult <- getCard conn cid
               case getResult of
-                Right (Just c) -> do
+                Just c -> do
                   cardAnkiNoteId c `shouldBe` Just 12345678
                   cardPushedAt c `shouldSatisfy` (/= Nothing)
-                _ -> expectationFailure "Failed to get pushed card"
+                Nothing -> expectationFailure "Failed to get pushed card"
             Nothing -> expectationFailure "Card ID was not assigned"
         Left err -> expectationFailure $ "Failed to save card: " <> show err
 
@@ -334,9 +334,9 @@ spec = do
         Just cid -> do
           getResult <- getCard conn cid
           case getResult of
-            Right (Just c) ->
+            Just c ->
               cardTags c `shouldBe` ["noun", "food", "A1", "tapir-generated"]
-            _ -> expectationFailure "Failed to get card with tags"
+            Nothing -> expectationFailure "Failed to get card with tags"
         Nothing -> expectationFailure "Card ID not assigned"
 
   describe "Transaction handling" $ do

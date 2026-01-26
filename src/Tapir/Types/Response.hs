@@ -68,7 +68,7 @@ responseToText = \case
   SRConversation cr -> convReply cr
   SRCorrection cr   -> crCorrected cr
   SRTranslation tr  -> trTargetText tr
-  SRCard cr         -> cardRespFront cr <> " — " <> cardRespBack cr
+  SRCard cr         -> cardRespFront cr <> " - " <> cardRespBack cr
   SRRawText t       -> t
 
 -- ════════════════════════════════════════════════════════════════

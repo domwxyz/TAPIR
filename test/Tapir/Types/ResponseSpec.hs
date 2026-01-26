@@ -421,9 +421,9 @@ spec = do
       let tr = TranslationResponse "src" "en" "target" "es" [] [] Nothing Nothing
       responseToText (SRTranslation tr) `shouldBe` "target"
 
-    it "extracts cardRespFront + ' — ' + cardRespBack from SRCard" $ do
+    it "extracts cardRespFront + ' - ' + cardRespBack from SRCard" $ do
       let card = CardResponse "front" "back" [] Nothing Nothing Nothing Nothing Nothing [] Nothing
-      responseToText (SRCard card) `shouldBe` "front — back"
+      responseToText (SRCard card) `shouldBe` "front - back"
 
     it "returns raw text for SRRawText" $ do
       responseToText (SRRawText "raw text") `shouldBe` "raw text"

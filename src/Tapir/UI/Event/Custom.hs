@@ -15,7 +15,7 @@ import Brick
 import Control.Monad (when)
 import Control.Monad.IO.Class (liftIO)
 import Data.Text (Text)
-import Data.Time (getCurrentTime)
+import Data.Time (UTCTime, getCurrentTime)
 import qualified Data.Text.Lazy.Builder as B
 import Lens.Micro.Mtl ((.=), (%=))
 
@@ -24,6 +24,7 @@ import Tapir.Types.Response (StructuredResponse(..), responseToText)
 import Tapir.UI.Types
 import Tapir.Db.Repository (saveMessage, saveCard, updateSessionTimestamp)
 import Tapir.Service.Card (extractCardFromResponse, cardResponseToAnkiCard)
+import Tapir.Service.Message (mkAssistantMessage, AssistantMessageParams(..))
 import Tapir.Core.Constants (providerNameOpenRouter)
 
 -- | Handle custom events from BChan
@@ -70,39 +71,54 @@ handleCustomEvent = \case
 handleStreamComplete :: Text -> EventM Name AppState ()
 handleStreamComplete fullResponse = do
   st <- get
-  let mode = _asCurrentMode st
-      sid = sessionId (_asSession st)
-      conn = _asDbConnection st
   now <- liftIO getCurrentTime
 
-  let msg = Message
-        { messageId         = Nothing
-        , messageSessionId  = sid
-        , messageRole       = Assistant
-        , messageContent    = fullResponse
-        , messageMode       = mode
-        , messageTimestamp  = now
-        , messageModel      = Nothing
-        , messageProvider   = Just providerNameOpenRouter
-        , messageTokensUsed = Nothing
-        , messageError      = Nothing
+  -- Pure: Create the message using service
+  let params = AssistantMessageParams
+        { ampSessionId = sessionId (_asSession st)
+        , ampContent   = fullResponse
+        , ampMode      = _asCurrentMode st
+        , ampTimestamp = now
+        , ampModel     = Nothing
+        , ampProvider  = Just providerNameOpenRouter
+        , ampTokens    = Nothing
         }
+      msg = mkAssistantMessage params
 
+  -- IO: Persist the message
+  let conn = _asDbConnection st
   savedResult <- liftIO $ saveMessage conn msg
   let savedMsg = either (const msg) id savedResult
 
-  asMessages %= (++ [savedMsg])
+  -- State: Update UI state
+  updateStateAfterMessage savedMsg
+
+  -- IO: Update session timestamp
+  _ <- liftIO $ updateSessionTimestamp conn (sessionId (_asSession st))
+
+  -- Conditional: Handle card generation mode
+  handleCardGenerationIfNeeded savedMsg fullResponse
+
+-- | Update state after receiving a message (extracted helper)
+updateStateAfterMessage :: Message -> EventM Name AppState ()
+updateStateAfterMessage msg = do
+  asMessages %= (++ [msg])
   asRequestState .= Idle
   asStreamingText .= mempty
 
-  _ <- liftIO $ updateSessionTimestamp conn sid
-
-  when (mode == CardGeneration) $ do
+-- | Handle card extraction if in card generation mode (extracted helper)
+handleCardGenerationIfNeeded :: Message -> Text -> EventM Name AppState ()
+handleCardGenerationIfNeeded savedMsg responseText = do
+  st <- get
+  when (_asCurrentMode st == CardGeneration) $ do
     let langMod = _asLangModule st
         langId = languageId (languageInfo langMod)
+        sid = sessionId (_asSession st)
         msgId = messageId savedMsg
-    case extractCardFromResponse langId sid msgId fullResponse now of
+    now <- liftIO getCurrentTime
+    case extractCardFromResponse langId sid msgId responseText now of
       Just card -> do
+        let conn = _asDbConnection st
         savedCardResult <- liftIO $ saveCard conn card
         case savedCardResult of
           Right savedCard -> do
@@ -116,39 +132,43 @@ handleStreamComplete fullResponse = do
 handleStructuredResponse :: StructuredResponse -> EventM Name AppState ()
 handleStructuredResponse structured = do
   st <- get
-  let mode = _asCurrentMode st
-      sid = sessionId (_asSession st)
-      conn = _asDbConnection st
   now <- liftIO getCurrentTime
 
+  -- Pure: Create the message using service
   let textContent = responseToText structured
-
-  let msg = Message
-        { messageId         = Nothing
-        , messageSessionId  = sid
-        , messageRole       = Assistant
-        , messageContent    = textContent
-        , messageMode       = mode
-        , messageTimestamp  = now
-        , messageModel      = Nothing
-        , messageProvider   = Just providerNameOpenRouter
-        , messageTokensUsed = Nothing
-        , messageError      = Nothing
+      params = AssistantMessageParams
+        { ampSessionId = sessionId (_asSession st)
+        , ampContent   = textContent
+        , ampMode      = _asCurrentMode st
+        , ampTimestamp = now
+        , ampModel     = Nothing
+        , ampProvider  = Just providerNameOpenRouter
+        , ampTokens    = Nothing
         }
+      msg = mkAssistantMessage params
 
+  -- IO: Persist the message
+  let conn = _asDbConnection st
   savedResult <- liftIO $ saveMessage conn msg
   let savedMsg = either (const msg) id savedResult
 
+  -- State: Update UI state
   asMessages %= (++ [savedMsg])
   asPendingStructured .= Just structured
   asRequestState .= Idle
 
-  case structured of
-    SRCard cardResp -> do
-      let langId = languageId (languageInfo (_asLangModule st))
-          card = cardResponseToAnkiCard cardResp sid langId now
-      asPendingCard .= Just card
-      asModal .= CardPreviewModal card
-    _ -> pure ()
+  -- Handle card response specifically
+  handleStructuredCard structured now
 
   vScrollToEnd (viewportScroll NameHistoryViewport)
+
+-- | Handle card extraction from structured response (extracted helper)
+handleStructuredCard :: StructuredResponse -> UTCTime -> EventM Name AppState ()
+handleStructuredCard (SRCard cardResp) now = do
+  st <- get
+  let langId = languageId (languageInfo (_asLangModule st))
+      sid = sessionId (_asSession st)
+      card = cardResponseToAnkiCard cardResp sid langId now
+  asPendingCard .= Just card
+  asModal .= CardPreviewModal card
+handleStructuredCard _ _ = pure ()

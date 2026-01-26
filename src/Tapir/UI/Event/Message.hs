@@ -22,6 +22,7 @@ import Tapir.UI.Types
 import Tapir.UI.Input (getEditorContent, mkInputEditor)
 import Tapir.Db.Repository (saveMessage, updateSessionTimestamp)
 import Tapir.Service.LLM (sendMessageAsync, SendMessageConfig(..))
+import Tapir.Service.Message (mkUserMessage)
 
 -- | Handle Enter key - send message
 handleSendMessage :: EventM Name AppState ()
@@ -34,19 +35,9 @@ handleSendMessage = do
           mode = _asCurrentMode st
           conn = _asDbConnection st
       now <- liftIO getCurrentTime
-      -- Create user message
-      let msg = Message
-            { messageId         = Nothing
-            , messageSessionId  = sid
-            , messageRole       = User
-            , messageContent    = content
-            , messageMode       = mode
-            , messageTimestamp  = now
-            , messageModel      = Nothing
-            , messageProvider   = Nothing
-            , messageTokensUsed = Nothing
-            , messageError      = Nothing
-            }
+
+      -- Pure: Create user message using service
+      let msg = mkUserMessage sid content mode now
 
       -- Save message to database and get version with ID
       savedResult <- liftIO $ saveMessage conn msg
@@ -59,6 +50,7 @@ handleSendMessage = do
       asRequestState .= Requesting
       asLastError .= Nothing
       asPendingStructured .= Nothing  -- Clear old structured response
+      asStreamingText .= mempty       -- Clear any stale streaming text
 
       -- Update session timestamp
       _ <- liftIO $ updateSessionTimestamp conn sid

@@ -28,19 +28,12 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Time (UTCTime, formatTime, defaultTimeLocale)
 
+import Tapir.Core.Error (safeUnsnoc)
 import Tapir.Types (Role(..), Role, Message(..), messageRole)
 import Tapir.UI.Types
 import Tapir.UI.Attrs
 import Tapir.UI.Structured (renderStructuredResponse)
 import Tapir.UI.Widgets (wrapTextDynamic)
-
--- | Safe unsnoc - decompose list into init and last (total implementation)
-unsnoc :: [a] -> Maybe ([a], a)
-unsnoc [] = Nothing
-unsnoc [x] = Just ([], x)
-unsnoc (x:xs) = case unsnoc xs of
-  Nothing -> Nothing  -- Cannot happen due to pattern above, but keeps it total
-  Just (ys, y) -> Just (x:ys, y)
 
 -- ════════════════════════════════════════════════════════════════
 -- MAIN CHAT WIDGET
@@ -63,7 +56,7 @@ renderChatHistory st =
       -- Check if the last message should be rendered as structured
       -- (when we have pendingStructured and last message is from Assistant)
       (messagesToRender, lastStructured) =
-        case (unsnoc messages, pendingStructured) of
+        case (safeUnsnoc messages, pendingStructured) of
           (Just (initMsgs, lastMsg), Just struct)
             | messageRole lastMsg == Assistant ->
               (initMsgs, Just struct)

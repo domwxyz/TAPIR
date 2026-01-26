@@ -34,9 +34,15 @@ handleMainEvent ev = case ev of
   EvKey (KChar 'c') [MCtrl] -> do
     st <- get
     case _asRequestState st of
-      Requesting -> asRequestState .= Idle
-      Streaming  -> asRequestState .= Idle
-      _          -> asModal .= ConfirmQuitModal
+      Requesting -> do
+        asRequestState .= Idle
+        asStreamingText .= mempty
+        asPendingStructured .= Nothing
+      Streaming -> do
+        asRequestState .= Idle
+        asStreamingText .= mempty
+        asPendingStructured .= Nothing
+      _ -> asModal .= ConfirmQuitModal
 
   -- Command menu (Ctrl+P)
   EvKey (KChar 'p') [MCtrl] -> asModal .= CommandMenuModal 0
