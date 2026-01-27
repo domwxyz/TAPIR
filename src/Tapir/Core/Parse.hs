@@ -53,7 +53,7 @@ import Tapir.Types (TapirError(..))
 parseUTCTime :: Text -> Either TapirError UTCTime
 parseUTCTime txt = case iso8601ParseM (T.unpack txt) of
   Just t  -> Right t
-  Nothing -> Left $ InternalError $ "Invalid ISO8601 timestamp: " <> txt
+  Nothing -> Left $ AppInternalError $ "Invalid ISO8601 timestamp: " <> txt
 
 -- | Parse ISO8601 timestamp, returning Nothing on failure.
 -- Use when "no timestamp" is an expected/valid case.
@@ -72,7 +72,7 @@ formatUTCTime = T.pack . iso8601Show
 parseJsonText :: FromJSON a => Text -> Either TapirError a
 parseJsonText txt = case eitherDecode (BL.fromStrict $ TE.encodeUtf8 txt) of
   Right a  -> Right a
-  Left err -> Left $ InternalError $ "JSON parse error: " <> T.pack err
+  Left err -> Left $ AppInternalError $ "JSON parse error: " <> T.pack err
 
 -- | Parse JSON from Text, returning Nothing on failure.
 parseJsonTextMaybe :: FromJSON a => Text -> Maybe a
@@ -124,12 +124,12 @@ stripMarkdownFences text =
 -- | Validate that text is non-empty.
 validateNonEmpty :: Text -> Text -> Either TapirError Text
 validateNonEmpty fieldName txt
-  | T.null (T.strip txt) = Left $ InternalError $ fieldName <> " cannot be empty"
+  | T.null (T.strip txt) = Left $ AppInternalError $ fieldName <> " cannot be empty"
   | otherwise = Right txt
 
 -- | Validate that a value is within a range.
 validateInRange :: (Ord a, Show a) => Text -> a -> a -> a -> Either TapirError a
 validateInRange fieldName minVal maxVal val
-  | val < minVal = Left $ InternalError $ fieldName <> " must be >= " <> T.pack (show minVal)
-  | val > maxVal = Left $ InternalError $ fieldName <> " must be <= " <> T.pack (show maxVal)
+  | val < minVal = Left $ AppInternalError $ fieldName <> " must be >= " <> T.pack (show minVal)
+  | val > maxVal = Left $ AppInternalError $ fieldName <> " must be <= " <> T.pack (show maxVal)
   | otherwise = Right val

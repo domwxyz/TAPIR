@@ -37,7 +37,7 @@ import Control.Concurrent.STM (TVar)
 import qualified Data.Text as T
 import Network.HTTP.Client
 
-import Tapir.Types (TapirError)
+import Tapir.Client.LLM.Error (LLMError)
 import Tapir.Types.Provider (ProviderConfig(..))
 import Tapir.Client.LLM.Types (ChatRequest, ChatResponse, StreamResult(..), StreamCallback)
 import Tapir.Client.LLM.Base
@@ -75,7 +75,7 @@ checkConfigured :: ProviderConfig -> IO Bool
 checkConfigured _ = pure True
 
 -- | Send a non-streaming request
-sendRequest :: OllamaClient -> ChatRequest -> IO (Either TapirError ChatResponse)
+sendRequest :: OllamaClient -> ChatRequest -> IO (Either LLMError ChatResponse)
 sendRequest = sendGenericRequest
 
 -- | Send a streaming request
@@ -84,5 +84,5 @@ streamRequest
   -> ChatRequest
   -> StreamCallback
   -> Maybe (TVar Bool)
-  -> IO (Either TapirError StreamResult)
+  -> IO (Either LLMError StreamResult)
 streamRequest = streamGenericRequest

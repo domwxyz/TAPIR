@@ -38,7 +38,7 @@ import Network.HTTP.Client
 import Network.HTTP.Client.TLS (tlsManagerSettings)
 import System.Environment (lookupEnv)
 
-import Tapir.Types (TapirError)
+import Tapir.Client.LLM.Error (LLMError)
 import Tapir.Types.Provider (ProviderConfig(..))
 import Tapir.Client.LLM.Types (ChatRequest, ChatResponse, StreamResult(..), StreamCallback)
 import Tapir.Client.LLM.Base
@@ -95,7 +95,7 @@ getApiKey cfg = case providerApiKey cfg of
           else pure Nothing
 
 -- | Send a non-streaming request
-sendRequest :: OpenAIClient -> ChatRequest -> IO (Either TapirError ChatResponse)
+sendRequest :: OpenAIClient -> ChatRequest -> IO (Either LLMError ChatResponse)
 sendRequest = sendGenericRequest
 
 -- | Send a streaming request
@@ -104,5 +104,5 @@ streamRequest
   -> ChatRequest
   -> StreamCallback
   -> Maybe (TVar Bool)
-  -> IO (Either TapirError StreamResult)
+  -> IO (Either LLMError StreamResult)
 streamRequest = streamGenericRequest

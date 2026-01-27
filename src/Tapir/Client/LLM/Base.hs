@@ -35,7 +35,7 @@ import qualified Data.Text as T
 import Network.HTTP.Client
 import Network.HTTP.Types.Status (statusCode)
 
-import Tapir.Types (TapirError(..))
+import Tapir.Client.LLM.Error (LLMError(..))
 import Tapir.Types.Provider (ProviderConfig(..))
 import Tapir.Client.LLM.Types
 import Tapir.Client.LLM.SSE (processSSEStream)
@@ -79,12 +79,12 @@ mkGenericClient mgr cfg endpoint getKey = GenericLLMClient
 sendGenericRequest
   :: GenericLLMClient
   -> ChatRequest
-  -> IO (Either TapirError ChatResponse)
+  -> IO (Either LLMError ChatResponse)
 sendGenericRequest GenericLLMClient{..} chatReq = do
   -- Check for API key if required
   mApiKey <- glcGetApiKey
   case (peRequiresAuth glcEndpoint, mApiKey) of
-    (True, Nothing) -> pure $ Left APIKeyMissing
+    (True, Nothing) -> pure $ Left LLMAPIKeyMissing
     _ -> do
       result <- try $ do
         -- Build request
@@ -113,15 +113,15 @@ sendGenericRequest GenericLLMClient{..} chatReq = do
         if status >= 200 && status < 300
           then case eitherDecode body of
             Right chatResp -> pure $ Right chatResp
-            Left err -> pure $ Left $ APIError status (T.pack err)
+            Left err -> pure $ Left $ LLMAPIError status (T.pack err)
           else case decode body of
             Just (APIErrorResponse err) ->
-              pure $ Left $ APIError status (aedMessage err)
+              pure $ Left $ LLMAPIError status (aedMessage err)
             Nothing ->
-              pure $ Left $ APIError status $ T.pack $ "HTTP " <> show status
+              pure $ Left $ LLMAPIError status $ T.pack $ "HTTP " <> show status
 
       case result of
-        Left (e :: HttpException) -> pure $ Left $ NetworkError $ T.pack $ show e
+        Left (e :: HttpException) -> pure $ Left $ LLMNetworkError $ T.pack $ show e
         Right r -> pure r
 
 -- | Send a streaming chat completion request
@@ -130,12 +130,12 @@ streamGenericRequest
   -> ChatRequest
   -> StreamCallback
   -> Maybe (TVar Bool)  -- ^ Optional cancel flag
-  -> IO (Either TapirError StreamResult)
+  -> IO (Either LLMError StreamResult)
 streamGenericRequest GenericLLMClient{..} chatReq onToken mCancelFlag = do
   -- Check for API key if required
   mApiKey <- glcGetApiKey
   case (peRequiresAuth glcEndpoint, mApiKey) of
-    (True, Nothing) -> pure $ Left APIKeyMissing
+    (True, Nothing) -> pure $ Left LLMAPIKeyMissing
     _ -> do
       result <- try $ do
         -- Build request
@@ -197,10 +197,10 @@ streamGenericRequest GenericLLMClient{..} chatReq onToken mCancelFlag = do
               let body = BL.fromChunks bodyChunks
               case decode body of
                 Just (APIErrorResponse err) ->
-                  pure $ Left $ APIError status (aedMessage err)
+                  pure $ Left $ LLMAPIError status (aedMessage err)
                 Nothing ->
-                  pure $ Left $ APIError status $ T.pack $ "HTTP " <> show status
+                  pure $ Left $ LLMAPIError status $ T.pack $ "HTTP " <> show status
 
       case result of
-        Left (e :: HttpException) -> pure $ Left $ NetworkError $ T.pack $ show e
+        Left (e :: HttpException) -> pure $ Left $ LLMNetworkError $ T.pack $ show e
         Right r -> pure r

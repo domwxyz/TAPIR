@@ -22,7 +22,8 @@ module Tapir.Client.LLM
 import Control.Concurrent.STM (TVar)
 import Data.Text (Text)
 
-import Tapir.Types (TapirError(..), ProviderType(..))
+import Tapir.Client.LLM.Error (LLMError(..))
+import Tapir.Types (ProviderType(..))
 import Tapir.Types.Provider (ProviderConfig(..))
 import Tapir.Client.LLM.Types
 import qualified Tapir.Client.LLM.OpenRouter as OpenRouter
@@ -40,7 +41,7 @@ data LLMClient = LLMClient
     llmProviderName :: !Text
 
     -- | Send a non-streaming completion request
-  , llmComplete :: ChatRequest -> IO (Either TapirError ChatResponse)
+  , llmComplete :: ChatRequest -> IO (Either LLMError ChatResponse)
 
     -- | Send a streaming completion request
     -- The callback is invoked for each token received
@@ -48,7 +49,7 @@ data LLMClient = LLMClient
   , llmStreamComplete :: ChatRequest
                       -> StreamCallback
                       -> Maybe (TVar Bool)  -- ^ Optional cancel flag
-                      -> IO (Either TapirError StreamResult)
+                      -> IO (Either LLMError StreamResult)
 
     -- | Check if the client is properly configured (has API key, etc.)
   , llmIsConfigured :: IO Bool
@@ -103,7 +104,7 @@ mkOllamaClient cfg = do
 notImplementedClient :: Text -> LLMClient
 notImplementedClient name = LLMClient
   { llmProviderName = name
-  , llmComplete = \_ -> pure $ Left $ InternalError $ name <> " provider not yet implemented"
-  , llmStreamComplete = \_ _ _ -> pure $ Left $ InternalError $ name <> " provider not yet implemented"
+  , llmComplete = \_ -> pure $ Left $ LLMProviderNotImplemented $ name <> " provider not yet implemented"
+  , llmStreamComplete = \_ _ _ -> pure $ Left $ LLMProviderNotImplemented $ name <> " provider not yet implemented"
   , llmIsConfigured = pure False
   }

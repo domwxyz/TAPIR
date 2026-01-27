@@ -22,7 +22,11 @@ import System.Environment (lookupEnv)
 import System.FilePath
 
 import Tapir.Config.Types
-import Tapir.Types
+import Tapir.Config.Error (ConfigError(..))
+import Tapir.Types (Mode, LanguageModule(..))
+import Tapir.Types.Language (LanguageInfo(..), LearnerLevel(..), learnerLevelDescription)
+import Tapir.Types.Mode (ModeConfig(..), modeToText)
+import Tapir.Types.Provider (ProviderConfig(..))
 
 -- | Variables available for prompt interpolation
 data PromptVars = PromptVars
@@ -40,7 +44,7 @@ getConfigDir = do
   pure $ home </> ".config" </> "tapir"
 
 -- | Load main configuration
-loadConfig :: IO (Either TapirError AppConfig)
+loadConfig :: IO (Either ConfigError AppConfig)
 loadConfig = do
   configDir <- getConfigDir
   let configPath = configDir </> "config.yaml"
@@ -55,7 +59,7 @@ loadConfig = do
         Right cfg -> expandConfigEnvVars cfg
 
 -- | Expand environment variables in config
-expandConfigEnvVars :: AppConfig -> IO (Either TapirError AppConfig)
+expandConfigEnvVars :: AppConfig -> IO (Either ConfigError AppConfig)
 expandConfigEnvVars cfg = do
   let prov = configProvider cfg
 
@@ -79,7 +83,7 @@ expandConfigEnvVars cfg = do
   pure $ Right $ cfg { configProvider = prov { providerApiKey = apiKey'' } }
 
 -- | Load a language module by name
-loadLanguageModule :: Text -> IO (Either TapirError LanguageModule)
+loadLanguageModule :: Text -> IO (Either ConfigError LanguageModule)
 loadLanguageModule langName = do
   configDir <- getConfigDir
   let langPath = configDir </> "languages" </> T.unpack langName <> ".yaml"

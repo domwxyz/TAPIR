@@ -67,12 +67,12 @@ sendMessage SendMessageConfig{..} = do
   result <- llmComplete smcClient req
 
   pure $ case result of
-    Left err -> LLMError err
+    Left err -> LLMError (AppLLMError err)  -- Wrap LLMError into TapirError
     Right resp ->
       case parseResponse smcMode resp of
         ParsedStructured sr -> LLMStructured sr
         ParsedRawText t -> LLMRawText t
-        ParsedError pe -> LLMError (InternalError (peMessage pe))
+        ParsedError pe -> LLMError (AppInternalError (peMessage pe))
 
 -- | Send a message asynchronously, delivering results via BChan
 --

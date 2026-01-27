@@ -26,9 +26,6 @@ import Brick
 import Brick.BChan (BChan, newBChan, writeBChan)
 import Control.Concurrent (forkIO)
 import Control.Exception (SomeException, try)
-import Data.Time (getCurrentTime)
-import Data.UUID.V4 (nextRandom)
-import qualified Data.UUID as UUID
 import Database.SQLite.Simple (Connection)
 import Graphics.Vty (defaultConfig)
 import Graphics.Vty.CrossPlatform (mkVty)
@@ -37,8 +34,6 @@ import Tapir.Types
 import Tapir.Config.Types (AppConfig(..), UIConfig(..))
 import Tapir.Client.LLM (LLMClient)
 import Tapir.Client.Anki (mkAnkiClientWithConfig, checkConnection)
-import Tapir.Db.Repository (createSession)
-import Tapir.Service.Session (mkNewSession)
 import Tapir.Core.Constants (eventChannelBufferSize)
 import Tapir.UI.Types
 import Tapir.UI.Attrs (getAttrMap)
@@ -61,10 +56,10 @@ tapirApp = App
   }
 
 -- | Run the TAPIR application
-runTapir :: AppConfig -> LanguageModule -> LLMClient -> Connection -> IO ()
-runTapir config langMod client conn = do
+runTapir :: AppConfig -> LanguageModule -> LLMClient -> Connection -> Session -> IO ()
+runTapir config langMod client conn session = do
   chan <- newBChan eventChannelBufferSize
-  initialState <- mkInitialState config langMod client conn chan
+  initialState <- mkInitialState config langMod client conn chan session
 
   let buildVty = mkVty defaultConfig
 
@@ -96,15 +91,9 @@ mkInitialState
   -> LLMClient
   -> Connection
   -> BChan TapirEvent
+  -> Session
   -> IO AppState
-mkInitialState config langMod client conn chan = do
-  sid <- UUID.toText <$> nextRandom
-  now <- getCurrentTime
-
-  let session = mkNewSession sid langMod now
-
-  _ <- createSession conn session
-
+mkInitialState config langMod client conn chan session = do
   let ankiCfg = configAnki config
   ankiClient <- mkAnkiClientWithConfig ankiCfg
 
@@ -119,7 +108,7 @@ mkInitialState config langMod client conn chan = do
     { _asSession        = session
     , _asMessages       = []
     , _asInputEditor    = mkInputEditor
-    , _asCurrentMode    = Conversation
+    , _asCurrentMode    = sessionMode session
     , _asFocus          = FocusInput
     , _asModal          = NoModal
     , _asRequestState   = Idle

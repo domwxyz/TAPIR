@@ -31,7 +31,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Database.SQLite.Simple
 
-import Tapir.Types (TapirError(..))
+import Tapir.Db.Error (DbError(..))
 
 -- | Current schema version
 schemaVersion :: Int
@@ -180,7 +180,7 @@ sessionStatsViewSQL = Query $ T.unlines
 -- | Initialize database with full schema
 -- This is the main entry point for database setup.
 -- It enables foreign keys, creates all tables, and runs migrations.
-initializeDatabase :: Connection -> IO (Either TapirError ())
+initializeDatabase :: Connection -> IO (Either DbError ())
 initializeDatabase conn = do
   result <- try $ do
     -- Enable foreign keys (must be done on each connection)
@@ -200,7 +200,7 @@ initializeDatabase conn = do
 
   case result of
     Left (e :: SomeException) ->
-      pure $ Left $ DatabaseError $ T.pack $ show e
+      pure $ Left $ DbQueryError $ T.pack $ show e
     Right () -> do
       -- Verify schema version (returns Either, handle gracefully)
       verifySchemaVersion conn
@@ -225,7 +225,7 @@ createTables conn = do
 
 -- | Verify the schema version matches expected
 -- Returns Left on version mismatch or parse failure
-verifySchemaVersion :: Connection -> IO (Either TapirError ())
+verifySchemaVersion :: Connection -> IO (Either DbError ())
 verifySchemaVersion conn = do
   result <- query_ conn
     "SELECT value FROM metadata WHERE key = 'schema_version'"
@@ -235,13 +235,13 @@ verifySchemaVersion conn = do
       case readMaybe (T.unpack ver) of
         Just currentVersion
           | currentVersion == schemaVersion -> pure $ Right ()
-          | otherwise -> pure $ Left $ MigrationError schemaVersion $
+          | otherwise -> pure $ Left $ DbMigrationError schemaVersion $
               "Schema version mismatch: expected " <> T.pack (show schemaVersion)
               <> ", got " <> T.pack (show currentVersion)
-        Nothing -> pure $ Left $ DatabaseError $
+        Nothing -> pure $ Left $ DbQueryError $
           "Invalid schema version in database: " <> ver
-    [] -> pure $ Left $ DatabaseError "No schema version found in metadata table"
-    _ -> pure $ Left $ DatabaseError "Multiple schema version entries found"
+    [] -> pure $ Left $ DbQueryError "No schema version found in metadata table"
+    _ -> pure $ Left $ DbQueryError "Multiple schema version entries found"
   where
     readMaybe :: String -> Maybe Int
     readMaybe s = case reads s of

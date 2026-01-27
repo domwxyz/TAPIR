@@ -14,6 +14,7 @@ import Data.Time (UTCTime, getCurrentTime)
 import Database.SQLite.Simple hiding (withTransaction)
 
 import Tapir.Types
+import Tapir.Db.Error (DbError(..))
 import Tapir.Db.Schema
 import Tapir.Db.Repository
 
@@ -363,6 +364,6 @@ spec = do
 
       result <- saveMessage conn msg
       case result of
-        Left (DatabaseError _) -> pure ()  -- Expected
+        Left (DbQueryError _) -> pure ()  -- Expected
         Right _ -> expectationFailure "Should have failed due to foreign key constraint"
         Left other -> expectationFailure $ "Unexpected error: " <> show other

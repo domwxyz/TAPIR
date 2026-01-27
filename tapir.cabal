@@ -46,6 +46,9 @@ library
     Tapir.Core.Logging
     Tapir.Core.Parse
     Tapir.Core.Selection
+    Tapir.Model.Chat
+    Tapir.Model.Anki
+    Tapir.Model.Error
     Tapir.Types
     Tapir.Types.Mode
     Tapir.Types.Language
@@ -57,9 +60,11 @@ library
     Tapir.Db.Schema
     Tapir.Db.Instances
     Tapir.Db.Repository
+    Tapir.Db.Error
     Tapir.Client.LLM
     Tapir.Client.LLM.Types
     Tapir.Client.LLM.Base
+    Tapir.Client.LLM.Error
     Tapir.Client.LLM.OpenRouter
     Tapir.Client.LLM.OpenAI
     Tapir.Client.LLM.Ollama
@@ -68,6 +73,8 @@ library
     Tapir.Client.LLM.Request
     Tapir.Client.LLM.Response
     Tapir.Client.Anki
+    Tapir.Client.Anki.Error
+    Tapir.Config.Error
     Tapir.Service.Card
     Tapir.Service.LLM
     Tapir.Service.Message

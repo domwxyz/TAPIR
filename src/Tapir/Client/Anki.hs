@@ -43,7 +43,7 @@ import Network.HTTP.Client
 import Network.HTTP.Client.TLS (tlsManagerSettings)
 import Network.HTTP.Types.Status (statusCode)
 
-import Tapir.Types (TapirError(..))
+import Tapir.Client.Anki.Error (AnkiError(..))
 import Tapir.Config.Types (AnkiClientConfig(..))
 import Tapir.Config.Defaults (defaultAnkiConfig)
 
@@ -162,7 +162,7 @@ instance ToJSON AnkiNote where
 -- ════════════════════════════════════════════════════════════════
 
 -- | Check if AnkiConnect is running and accessible
-checkConnection :: AnkiClient -> IO (Either TapirError Bool)
+checkConnection :: AnkiClient -> IO (Either AnkiError Bool)
 checkConnection client = do
   result <- sendAction client "version" Nothing
   case result of
@@ -170,7 +170,7 @@ checkConnection client = do
     Left err -> pure $ Left err
 
 -- | Add a single note to Anki, returns the note ID
-addNote :: AnkiClient -> AnkiNote -> IO (Either TapirError Integer)
+addNote :: AnkiClient -> AnkiNote -> IO (Either AnkiError Integer)
 addNote client note = do
   let params = object ["note" .= note]
   result <- sendAction client "addNote" (Just params)
@@ -179,7 +179,7 @@ addNote client note = do
     Left err -> pure $ Left err
 
 -- | Add multiple notes, returns list of note IDs (null for failures)
-addNotes :: AnkiClient -> [AnkiNote] -> IO (Either TapirError [Maybe Integer])
+addNotes :: AnkiClient -> [AnkiNote] -> IO (Either AnkiError [Maybe Integer])
 addNotes client notes = do
   let params = object ["notes" .= notes]
   result <- sendAction client "addNotes" (Just params)
@@ -188,7 +188,7 @@ addNotes client notes = do
     Left err -> pure $ Left err
 
 -- | Find notes by query (e.g., "deck:Spanish tag:verb")
-findNotes :: AnkiClient -> Text -> IO (Either TapirError [Integer])
+findNotes :: AnkiClient -> Text -> IO (Either AnkiError [Integer])
 findNotes client query = do
   let params = object ["query" .= query]
   result <- sendAction client "findNotes" (Just params)
@@ -197,7 +197,7 @@ findNotes client query = do
     Left err -> pure $ Left err
 
 -- | Get list of all deck names
-getDeckNames :: AnkiClient -> IO (Either TapirError [Text])
+getDeckNames :: AnkiClient -> IO (Either AnkiError [Text])
 getDeckNames client = do
   result <- sendAction client "deckNames" Nothing
   case result of
@@ -205,7 +205,7 @@ getDeckNames client = do
     Left err -> pure $ Left err
 
 -- | Create a new deck
-createDeck :: AnkiClient -> Text -> IO (Either TapirError Integer)
+createDeck :: AnkiClient -> Text -> IO (Either AnkiError Integer)
 createDeck client deckName = do
   let params = object ["deck" .= deckName]
   result <- sendAction client "createDeck" (Just params)
@@ -218,7 +218,7 @@ createDeck client deckName = do
 -- ════════════════════════════════════════════════════════════════
 
 -- | Send an action to AnkiConnect and parse the result
-sendAction :: FromJSON a => AnkiClient -> Text -> Maybe Value -> IO (Either TapirError a)
+sendAction :: FromJSON a => AnkiClient -> Text -> Maybe Value -> IO (Either AnkiError a)
 sendAction AnkiClient{..} action params = do
   let req = AnkiRequest
         { arAction  = action

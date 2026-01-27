@@ -12,6 +12,7 @@ module Tapir.Service.Session
   ( -- * Session Creation
     mkNewSession
   , mkNewSessionWithMode
+  , createInitialSession
   , sessionFromSummary
 
     -- * Session Defaults
@@ -19,7 +20,10 @@ module Tapir.Service.Session
   ) where
 
 import Data.Text (Text)
-import Data.Time (UTCTime)
+import qualified Data.UUID as UUID
+import Data.UUID.V4 (nextRandom)
+import Data.Time (UTCTime, getCurrentTime)
+import Database.SQLite.Simple (Connection)
 
 import Tapir.Types
   ( Session(..)
@@ -29,6 +33,8 @@ import Tapir.Types
   , LearnerLevel
   )
 import Tapir.UI.Types (SessionSummary(..))
+import Tapir.Db.Repository (createSession)
+import Tapir.Db.Error (DbError)
 
 -- | Default mode for new sessions
 defaultSessionMode :: Mode
@@ -87,3 +93,21 @@ sessionFromSummary summary level now = Session
   , sessionTitle       = Just (summaryTitle summary)
   , sessionActive      = True
   }
+
+-- | Create and persist a new session with fresh UUID
+--
+-- This is the main entry point for session creation at app startup.
+-- It generates a UUID, creates a Session object, persists it to the database,
+-- and returns the session.
+createInitialSession
+  :: Connection
+  -> LanguageModule
+  -> IO (Either DbError Session)
+createInitialSession conn langMod = do
+  sid <- UUID.toText <$> nextRandom
+  now <- getCurrentTime
+  let session = mkNewSession sid langMod now
+  result <- createSession conn session
+  pure $ case result of
+    Left err -> Left err
+    Right () -> Right session

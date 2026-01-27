@@ -18,7 +18,7 @@ import Control.Monad (void)
 import Control.Monad.IO.Class (liftIO)
 import Lens.Micro.Mtl ((.=))
 
-import Tapir.Types (AnkiCard(..))
+import Tapir.Types (TapirError(..), AnkiCard(..))
 import Tapir.UI.Types
 import Tapir.Client.Anki (addNote, AnkiNote(..), defaultNoteOptions)
 import Tapir.Db.Repository (markCardPushed)
@@ -53,7 +53,7 @@ handleCardPush card = do
           Nothing  -> pure ()
         writeBChan chan (EvCardPushResult (Right noteId))
       Left err ->
-        writeBChan chan (EvCardPushResult (Left err))
+        writeBChan chan (EvCardPushResult (Left (AppAnkiError err)))
 
   -- Close modal (result will come via EvCardPushResult)
   asModal .= NoModal

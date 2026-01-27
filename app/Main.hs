@@ -21,7 +21,9 @@ import Tapir.Config.Types
 import Tapir.Config.Loader (loadConfig, loadLanguageModule, expandPath)
 import Tapir.Config.Defaults (defaultConfig)
 import Tapir.Db.Schema (initializeDatabase)
+import Tapir.Db.Error (displayDbError)
 import Tapir.Client.LLM (mkLLMClient, LLMClient(..))
+import Tapir.Service.Session (createInitialSession)
 import Tapir.UI.App (runTapir)
 
 main :: IO ()
@@ -64,7 +66,7 @@ main = do
     dbResult <- initializeDatabase conn
     case dbResult of
       Left err -> do
-        putStrLn $ "[ERROR] Database initialization failed: " <> T.unpack (displayError err)
+        putStrLn $ "[ERROR] Database initialization failed: " <> T.unpack (displayDbError err)
         exitFailure
       Right () -> putStrLn "[OK] Database initialized"
 
@@ -87,14 +89,24 @@ main = do
     -- Check Anki (optional)
     putStrLn "[INFO] Anki integration will be checked at runtime"
 
-    putStrLn ""
-    putStrLn "[OK] All systems ready!"
-    putStrLn ""
-    putStrLn "Starting TUI... (Press Ctrl+Q to quit)"
-    putStrLn ""
+    -- Create initial session
+    putStrLn "[...] Creating session..."
+    sessionResult <- createInitialSession conn langMod
+    case sessionResult of
+      Left err -> do
+        putStrLn $ "[ERROR] Failed to create session: " <> T.unpack (displayDbError err)
+        exitFailure
+      Right session -> do
+        putStrLn "[OK] Session created"
 
-    -- Run the TUI
-    runTapir config langMod client conn
+        putStrLn ""
+        putStrLn "[OK] All systems ready!"
+        putStrLn ""
+        putStrLn "Starting TUI... (Press Ctrl+Q to quit)"
+        putStrLn ""
+
+        -- Run the TUI
+        runTapir config langMod client conn session
 
   putStrLn ""
   putStrLn "Goodbye!"

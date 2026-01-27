@@ -27,8 +27,8 @@ spec = describe "Tapir.Core.Parse" $ do
 
     it "returns Left for invalid timestamp" $ do
       case parseUTCTime "not-a-date" of
-        Left (InternalError msg) -> msg `shouldSatisfy` T.isInfixOf "Invalid ISO8601"
-        _ -> expectationFailure "expected Left InternalError"
+        Left (AppInternalError msg) -> msg `shouldSatisfy` T.isInfixOf "Invalid ISO8601"
+        _ -> expectationFailure "expected Left AppInternalError"
 
     it "returns Left for empty string" $ do
       case parseUTCTime "" of
@@ -74,8 +74,8 @@ spec = describe "Tapir.Core.Parse" $ do
 
     it "returns Left for invalid JSON" $ do
       case parseJsonText "not json" :: Either TapirError [T.Text] of
-        Left (InternalError msg) -> msg `shouldSatisfy` T.isInfixOf "JSON parse error"
-        _ -> expectationFailure "expected Left InternalError"
+        Left (AppInternalError msg) -> msg `shouldSatisfy` T.isInfixOf "JSON parse error"
+        _ -> expectationFailure "expected Left AppInternalError"
 
     it "returns Left for empty string" $ do
       case parseJsonText "" :: Either TapirError [T.Text] of
@@ -136,8 +136,8 @@ spec = describe "Tapir.Core.Parse" $ do
 
     it "returns Left for empty text" $ do
       case validateNonEmpty "myField" "" of
-        Left (InternalError msg) -> msg `shouldSatisfy` T.isInfixOf "myField"
-        _ -> expectationFailure "expected Left InternalError"
+        Left (AppInternalError msg) -> msg `shouldSatisfy` T.isInfixOf "myField"
+        _ -> expectationFailure "expected Left AppInternalError"
 
     it "returns Left for whitespace-only text" $ do
       case validateNonEmpty "field" "   " of
@@ -150,13 +150,13 @@ spec = describe "Tapir.Core.Parse" $ do
 
     it "returns Left for value below minimum" $ do
       case validateInRange "score" (0 :: Int) 100 (-5) of
-        Left (InternalError msg) -> msg `shouldSatisfy` T.isInfixOf ">="
-        _ -> expectationFailure "expected Left InternalError"
+        Left (AppInternalError msg) -> msg `shouldSatisfy` T.isInfixOf ">="
+        _ -> expectationFailure "expected Left AppInternalError"
 
     it "returns Left for value above maximum" $ do
       case validateInRange "score" (0 :: Int) 100 150 of
-        Left (InternalError msg) -> msg `shouldSatisfy` T.isInfixOf "<="
-        _ -> expectationFailure "expected Left InternalError"
+        Left (AppInternalError msg) -> msg `shouldSatisfy` T.isInfixOf "<="
+        _ -> expectationFailure "expected Left AppInternalError"
 
     it "accepts boundary values" $ do
       validateInRange "score" (0 :: Int) 100 0 `shouldBe` Right (0 :: Int)
