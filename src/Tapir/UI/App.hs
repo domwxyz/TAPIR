@@ -112,7 +112,6 @@ mkInitialState config langMod client conn chan session = do
     , _asFocus          = FocusInput
     , _asModal          = NoModal
     , _asRequestState   = Idle
-    , _asStreamingText  = mempty
     , _asPendingCard    = Nothing
     , _asPendingStructured = Nothing
     , _asAnkiConnected  = False

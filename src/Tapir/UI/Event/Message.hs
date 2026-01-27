@@ -50,7 +50,6 @@ handleSendMessage = do
       asRequestState .= Requesting
       asLastError .= Nothing
       asPendingStructured .= Nothing  -- Clear old structured response
-      asStreamingText .= mempty       -- Clear any stale streaming text
 
       -- Update session timestamp
       _ <- liftIO $ updateSessionTimestamp conn sid

@@ -35,7 +35,6 @@ module Tapir.UI.Types
 
     -- * Request State
   , RequestState(..)
-  , isStreaming
   , isRequesting
 
     -- * Application State
@@ -49,7 +48,6 @@ module Tapir.UI.Types
   , asFocus
   , asModal
   , asRequestState
-  , asStreamingText
   , asPendingCard
   , asPendingStructured
   , asAnkiConnected
@@ -71,7 +69,6 @@ module Tapir.UI.Types
 import Brick.BChan (BChan)
 import Brick.Widgets.Edit (Editor)
 import Data.Text (Text)
-import Data.Text.Lazy.Builder (Builder)
 import Data.Time (UTCTime)
 import Database.SQLite.Simple (Connection)
 import Lens.Micro.TH (makeLenses)
@@ -191,16 +188,10 @@ mkCommandSelection = Sel.fromNonEmpty (CmdNewSession :| [CmdSessionList, CmdSett
 data RequestState
   = Idle                    -- ^ No active request
   | Requesting              -- ^ Request sent, waiting for response
-  | Streaming               -- ^ Streaming response in progress
   | RequestFailed !TapirError  -- ^ Request failed with error
   deriving (Eq, Show)
 
--- | Check if currently streaming
-isStreaming :: RequestState -> Bool
-isStreaming Streaming = True
-isStreaming _         = False
-
--- | Check if request in progress (requesting or streaming)
+-- | Check if request in progress
 isRequesting :: RequestState -> Bool
 isRequesting Idle             = False
 isRequesting (RequestFailed _) = False
@@ -227,9 +218,7 @@ data SessionSummary = SessionSummary
 -- | Custom events for the brick app
 -- These are sent via BChan for async operations
 data TapirEvent
-  = EvStreamChunk !Text             -- ^ Streaming token received
-  | EvStreamComplete !Text          -- ^ Stream completed with full response
-  | EvStreamError !TapirError       -- ^ Stream error occurred
+  = EvRequestError !TapirError      -- ^ Request error occurred
   | EvStructuredResponse !StructuredResponse  -- ^ Parsed structured response from tools
   | EvAnkiStatusUpdate !Bool        -- ^ Anki connection status changed
   | EvCardPushResult !(Either TapirError Integer)  -- ^ Card push result (note ID)
@@ -253,7 +242,6 @@ data AppState = AppState
   , _asFocus             :: !Focus                -- ^ Current focus area
   , _asModal             :: !Modal                -- ^ Current modal state
   , _asRequestState      :: !RequestState         -- ^ LLM request state
-  , _asStreamingText     :: !Builder              -- ^ Accumulated streaming text (O(1) append)
   , _asPendingCard       :: !(Maybe AnkiCard)     -- ^ Card pending push to Anki
   , _asPendingStructured  :: !(Maybe StructuredResponse)  -- ^ Parsed structured response
   , _asAnkiConnected     :: !Bool                 -- ^ Anki connection status

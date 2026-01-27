@@ -36,11 +36,6 @@ handleMainEvent ev = case ev of
     case _asRequestState st of
       Requesting -> do
         asRequestState .= Idle
-        asStreamingText .= mempty
-        asPendingStructured .= Nothing
-      Streaming -> do
-        asRequestState .= Idle
-        asStreamingText .= mempty
         asPendingStructured .= Nothing
       _ -> asModal .= ConfirmQuitModal
 

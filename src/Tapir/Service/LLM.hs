@@ -27,7 +27,7 @@ import Control.Monad (void)
 import Data.Text (Text)
 
 import Tapir.Types
-import Tapir.Types.Response (StructuredResponse)
+import Tapir.Types.Response (StructuredResponse(..))
 import Tapir.Config.Types (AppConfig)
 import Tapir.Client.LLM (LLMClient, llmComplete)
 import Tapir.Client.LLM.Request (buildRequestWithTools)
@@ -86,6 +86,6 @@ sendMessageAsync cfg chan = void $ forkIO $ do
   result <- sendMessage cfg
   let event = case result of
         LLMStructured sr -> EvStructuredResponse sr
-        LLMRawText t     -> EvStreamComplete t
-        LLMError err     -> EvStreamError err
+        LLMRawText t     -> EvStructuredResponse (SRRawText t)
+        LLMError err     -> EvRequestError err
   writeBChan chan event
